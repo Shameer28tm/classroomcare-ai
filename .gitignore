@@ -12,7 +12,7 @@ venv/
 .venv/
 ENV/
 
-# Production builds
+# Production builds & artifacts
 dist/
 build/
 *.egg-info/
@@ -28,16 +28,23 @@ Thumbs.db
 
 # Environment variables & secrets
 .env
-.env.local
-.env.*.local
+.env.*
+!.env.example
+*.env
+*.env.local
+*.env.*.local
 *.pem
 *.key
+*.cert
+*.crt
 
 # Test and coverage
 .coverage
 .coverage.*
 htmlcov/
 .pytest_cache/
+.mypy_cache/
+.ruff_cache/
 coverage/
 
 # Logs

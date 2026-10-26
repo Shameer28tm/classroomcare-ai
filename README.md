@@ -129,3 +129,14 @@ npm run build
 - [NIU Public Source Inventory](file:///c:/Users/shameer/OneDrive/Documents/classroomcare-ai/ClassroomCare-App/docs/niu-public-source-inventory.md) — Provenance records from `https://www.niuniv.com/`.
 - [Safety Policy Matrix](file:///c:/Users/shameer/OneDrive/Documents/classroomcare-ai/ClassroomCare-App/docs/safety-policy-matrix.md) — Deterministic hazard definitions & emergency protocol.
 - [Implementation Plan](file:///c:/Users/shameer/OneDrive/Documents/classroomcare-ai/ClassroomCare-App/docs/implementation-plan.md) — Phased roadmap and completed tasks.
+- [GitHub Profile Recommendations](file:///c:/Users/shameer/OneDrive/Documents/classroomcare-ai/ClassroomCare-App/docs/github-profile-recommendations.md) — Repository topics, metadata, and profile README template.
+
+---
+
+## 6. DevSecOps, Governance & Quality Gates
+
+ClassroomCare AI incorporates automated quality gates and security controls:
+- **Automated CI Workflow:** `.github/workflows/ci.yml` runs Gitleaks secret scanning, 38 backend Pytest cases, multi-agent CUJs, and Vite production builds on every push and pull request.
+- **Security Policy:** See [`SECURITY.md`](file:///c:/Users/shameer/OneDrive/Documents/classroomcare-ai/ClassroomCare-App/SECURITY.md) for vulnerability disclosure channels (`shameertmdevop@gmail.com`) and credential incident response protocols.
+- **Contribution Guidelines:** See [`CONTRIBUTING.md`](file:///c:/Users/shameer/OneDrive/Documents/classroomcare-ai/ClassroomCare-App/CONTRIBUTING.md) for conventional commits and local quality checks.
+- **License:** Distributed under the [MIT License](file:///c:/Users/shameer/OneDrive/Documents/classroomcare-ai/ClassroomCare-App/LICENSE).
