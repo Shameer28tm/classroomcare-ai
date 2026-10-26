@@ -1,13 +1,40 @@
 -- Migration: 20261026000002_pgvector_setup.sql
 -- Description: pgvector extension, knowledge documents, chunks, and hybrid search indexes
 
--- Enable vector extension safely in extensions schema
+-- 1. Ensure extensions schema exists
 CREATE SCHEMA IF NOT EXISTS extensions;
-CREATE EXTENSION IF NOT EXISTS vector WITH SCHEMA extensions;
-GRANT USAGE ON SCHEMA extensions TO postgres, anon, authenticated, service_role;
+
+-- 2. Safely create or locate vector extension
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'vector') THEN
+        BEGIN
+            CREATE EXTENSION vector WITH SCHEMA extensions;
+        EXCEPTION WHEN OTHERS THEN
+            CREATE EXTENSION vector;
+        END;
+    END IF;
+END $$;
+
+-- 3. Grant usage on schema containing vector to standard Supabase roles
+DO $$
+DECLARE
+    ext_schema text;
+BEGIN
+    SELECT n.nspname INTO ext_schema
+    FROM pg_extension e
+    JOIN pg_namespace n ON e.extnamespace = n.oid
+    WHERE e.extname = 'vector';
+
+    IF ext_schema IS NOT NULL THEN
+        EXECUTE format('GRANT USAGE ON SCHEMA %I TO postgres, anon, authenticated, service_role;', ext_schema);
+    END IF;
+END $$;
+
+-- 4. Set search_path so vector and its operator classes resolve seamlessly
 SET search_path TO public, extensions;
 
--- Knowledge Documents
+-- 5. Knowledge Documents Table
 CREATE TABLE IF NOT EXISTS knowledge_documents (
     id VARCHAR(64) PRIMARY KEY,
     campus_id VARCHAR(64) REFERENCES campuses(id) ON DELETE CASCADE,
@@ -23,7 +50,7 @@ CREATE TABLE IF NOT EXISTS knowledge_documents (
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Document Chunks with Vector (768) and Full-Text Search
+-- 6. Document Chunks with Vector (768) and Full-Text Search
 CREATE TABLE IF NOT EXISTS document_chunks (
     id VARCHAR(64) PRIMARY KEY,
     document_id VARCHAR(64) REFERENCES knowledge_documents(id) ON DELETE CASCADE,
@@ -31,19 +58,16 @@ CREATE TABLE IF NOT EXISTS document_chunks (
     chunk_index INT NOT NULL,
     content TEXT NOT NULL,
     metadata JSONB DEFAULT '{}'::jsonb,
-    embedding extensions.vector(768),
+    embedding vector(768),
     tsv tsvector GENERATED ALWAYS AS (to_tsvector('english', content)) STORED,
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Hybrid Search Indexes
--- 1. Full-Text Search GIN index
+-- 7. Hybrid Search Indexes
 CREATE INDEX IF NOT EXISTS idx_chunks_tsv ON document_chunks USING GIN(tsv);
+CREATE INDEX IF NOT EXISTS idx_chunks_embedding_hnsw ON document_chunks USING hnsw (embedding vector_cosine_ops);
 
--- 2. HNSW index for pgvector cosine distance
-CREATE INDEX IF NOT EXISTS idx_chunks_embedding_hnsw ON document_chunks USING hnsw (embedding extensions.vector_cosine_ops);
-
--- Agent Execution Runs
+-- 8. Agent Execution Runs
 CREATE TABLE IF NOT EXISTS agent_runs (
     id VARCHAR(64) PRIMARY KEY,
     ticket_id VARCHAR(64) REFERENCES maintenance_requests(id) ON DELETE CASCADE,
