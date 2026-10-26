@@ -51,7 +51,12 @@ export const TicketDetailDrawer: React.FC<TicketDetailDrawerProps> = ({
       onUpdated();
     } catch (err: any) {
       setAssigning(false);
-      setActionError(err?.message || 'Failed to assign technician');
+      const msg = err?.message || 'Failed to assign technician';
+      if (msg.includes('Forbidden') || msg.includes('lacks required permission')) {
+        setActionError('Permission Notice: Technician dispatch requires Facilities Manager or Campus Admin role. Please switch role in the sidebar Demo Sandbox.');
+      } else {
+        setActionError(msg);
+      }
     }
   };
 

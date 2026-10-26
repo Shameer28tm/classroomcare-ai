@@ -46,6 +46,8 @@ export const Tickets: React.FC = () => {
 
   useEffect(() => {
     fetchTickets();
+    window.addEventListener('auth_role_changed', fetchTickets);
+    return () => window.removeEventListener('auth_role_changed', fetchTickets);
   }, [selectedCategory, selectedPriority, selectedStatus]);
 
   const filteredTickets = tickets.filter((t) => {

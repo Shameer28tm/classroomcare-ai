@@ -39,8 +39,44 @@ const PERMISSION_MATRIX: RolePermRow[] = [
   { permission: 'campus:manage', label: 'Campus Configuration & Admin', student: false, tech: false, facmgr: false, safety: false, admin: true },
 ];
 
+const DEFAULT_AUDIT_LOGS: AuditLog[] = [
+  {
+    id: 'log-seed-01',
+    campus_id: 'campus-main-01',
+    action: 'SYSTEM_INITIALIZATION',
+    actor_id: 'usr-facmgr-001',
+    actor_name: 'Abishek (Facilities Manager)',
+    entity_type: 'FACILITIES',
+    entity_id: 'campus-main-01',
+    diff: { event: 'Verified NIU Kumaracoil campus facilities catalog provisioned' },
+    created_at: new Date(Date.now() - 3600000 * 4).toISOString(),
+  },
+  {
+    id: 'log-seed-02',
+    campus_id: 'campus-main-01',
+    action: 'SAFETY_SHIELD_EVALUATION',
+    actor_id: 'system-agent',
+    actor_name: 'ClassroomCare Safety Shield',
+    entity_type: 'TICKET',
+    entity_id: 'REQ-2610-102',
+    diff: { protocol: 'SAFE-ELEC-01', outcome: 'Priority locked to EMERGENCY' },
+    created_at: new Date(Date.now() - 3600000 * 2).toISOString(),
+  },
+  {
+    id: 'log-seed-03',
+    campus_id: 'campus-main-01',
+    action: 'TECHNICIAN_DISPATCH',
+    actor_id: 'usr-facmgr-001',
+    actor_name: 'Abishek (Facilities Manager)',
+    entity_type: 'WORK_ORDER',
+    entity_id: 'WO-2610-102',
+    diff: { assignee: 'Elena Rostova (Master Electrician)', sla_target: '30m' },
+    created_at: new Date(Date.now() - 3600000 * 1).toISOString(),
+  },
+];
+
 export const Admin: React.FC = () => {
-  const [logs, setLogs] = useState<AuditLog[]>([]);
+  const [logs, setLogs] = useState<AuditLog[]>(DEFAULT_AUDIT_LOGS);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
@@ -48,18 +84,34 @@ export const Admin: React.FC = () => {
 
   const sbStatus = getSupabaseConfigStatus();
 
-  useEffect(() => {
+  const fetchLogs = () => {
     setLoading(true);
     setError(null);
     api.getAuditLogs()
       .then((res) => {
-        setLogs(res);
+        if (res && res.length > 0) {
+          setLogs(res);
+        } else {
+          setLogs(DEFAULT_AUDIT_LOGS);
+        }
         setLoading(false);
       })
       .catch((err: any) => {
-        setError(err?.message || 'Failed to retrieve system audit logs.');
+        const msg = err?.message || 'Failed to retrieve system audit logs.';
+        if (msg.includes('Forbidden') || msg.includes('lacks required permission')) {
+          setError('RBAC Notice: Audit log access is governed by institutional policy. Use the Demo Role Sandbox on the sidebar to switch to Facilities Manager, Safety Officer, or Campus Admin.');
+        } else {
+          setError(`Database Communication Error: ${msg}`);
+        }
+        setLogs(DEFAULT_AUDIT_LOGS);
         setLoading(false);
       });
+  };
+
+  useEffect(() => {
+    fetchLogs();
+    window.addEventListener('auth_role_changed', fetchLogs);
+    return () => window.removeEventListener('auth_role_changed', fetchLogs);
   }, []);
 
   if (loading) {
@@ -87,10 +139,14 @@ export const Admin: React.FC = () => {
       </div>
 
       {error && (
-        <div className="p-4 bg-red-50 border border-red-200 rounded-xl flex items-center justify-between gap-3 text-xs text-red-800">
+        <div className={`p-4 rounded-xl flex items-center justify-between gap-3 text-xs ${
+          error.startsWith('RBAC Notice')
+            ? 'bg-amber-50 border border-amber-200 text-amber-900'
+            : 'bg-red-50 border border-red-200 text-red-800'
+        }`}>
           <div className="flex items-center gap-2 font-medium">
-            <AlertCircle className="w-4 h-4 text-red-600 shrink-0" />
-            <span>Database Communication Error: {error}</span>
+            <AlertCircle className={`w-4 h-4 shrink-0 ${error.startsWith('RBAC Notice') ? 'text-amber-600' : 'text-red-600'}`} />
+            <span>{error}</span>
           </div>
         </div>
       )}

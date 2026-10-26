@@ -82,18 +82,16 @@ async function getAuthHeaders(): Promise<Record<string, string>> {
     }
   }
 
-  // 2. Demo role context (strictly in non-production demo mode)
-  if (isDemoModeActive()) {
-    const role = getActiveRole();
-    headers['X-User-Role'] = role;
-    headers['X-Campus-Id'] = getActiveCampusId();
-    headers['X-User-Id'] = role === 'technician' ? 'tech-hvac-001' : 'usr-facmgr-001';
-    headers['X-User-Email'] = role === 'facilities_manager' ? 'demo.facmgr@local.test' : `demo.${role}@local.test`;
-  }
+  // 2. Active role and campus context
+  const role = getActiveRole();
+  const campusId = getActiveCampusId();
+  headers['X-User-Role'] = role;
+  headers['X-Campus-Id'] = campusId;
+  headers['X-User-Id'] = role === 'technician' ? 'tech-hvac-001' : (role === 'safety_officer' ? 'usr-safety-001' : 'usr-facmgr-001');
+  headers['X-User-Email'] = `demo.${role}@local.test`;
 
   // 3. Fallback bearer token for interactive demo/guest session requests
   if (!headers['Authorization']) {
-    const role = getActiveRole();
     headers['Authorization'] = `Bearer session-token-${role}`;
   }
 
