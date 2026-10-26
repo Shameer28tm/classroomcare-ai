@@ -100,7 +100,8 @@ class RAGAssistant:
         if settings.LLM_PROVIDER == "gemini" and settings.GEMINI_API_KEY and not settings.GEMINI_API_KEY.startswith("your-"):
             try:
                 import httpx
-                url = f"https://generativelanguage.googleapis.com/v1beta/models/{settings.GEMINI_MODEL}:generateContent?key={settings.GEMINI_API_KEY}"
+                models_to_try = [settings.GEMINI_MODEL, "gemini-3.6-flash", "gemini-3.5-flash-lite", "gemini-3-flash-preview"]
+                unique_models = list(dict.fromkeys(models_to_try))
                 prompt = (
                     "You are ClassroomCare AI, an autonomous facilities maintenance assistant for Noorul Islam Centre for Higher Education.\n"
                     "Answer the user query strictly grounded in the following technical reference passage. "
@@ -113,15 +114,22 @@ class RAGAssistant:
                     "contents": [{"parts": [{"text": prompt}]}],
                     "generationConfig": {"maxOutputTokens": 300, "temperature": 0.2}
                 }
-                with httpx.Client(timeout=6.0) as client:
-                    resp = client.post(url, json=payload)
-                    if resp.status_code == 200:
-                        data = resp.json()
-                        candidates = data.get("candidates", [])
-                        if candidates:
-                            parts = candidates[0].get("content", {}).get("parts", [])
-                            if parts:
-                                gemini_answer = parts[0].get("text", "").strip()
+                for mod in unique_models:
+                    try:
+                        url = f"https://generativelanguage.googleapis.com/v1beta/models/{mod}:generateContent?key={settings.GEMINI_API_KEY}"
+                        with httpx.Client(timeout=6.0) as client:
+                            resp = client.post(url, json=payload)
+                            if resp.status_code == 200:
+                                data = resp.json()
+                                candidates = data.get("candidates", [])
+                                if candidates:
+                                    parts = candidates[0].get("content", {}).get("parts", [])
+                                    if parts:
+                                        gemini_answer = parts[0].get("text", "").strip()
+                                        if gemini_answer:
+                                            break
+                    except Exception:
+                        continue
             except Exception:
                 gemini_answer = None  # Fall back to verified deterministic template
 

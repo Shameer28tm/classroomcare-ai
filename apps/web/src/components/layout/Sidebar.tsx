@@ -32,7 +32,7 @@ const navItems: NavItem[] = [
   { name: 'AI Agent Telemetry', path: '/agent', icon: Bot },
   { name: 'Knowledge & Manuals', path: '/knowledge', icon: BookOpen },
   { name: 'Technician Hub', path: '/technician', icon: Wrench },
-  { name: 'Facilities & Assets', path: '/facilities', icon: Building2 },
+  { name: 'Buildings & Facilities', path: '/facilities', icon: Building2 },
   { name: 'SLA Monitoring', path: '/sla', icon: Clock },
   { name: 'Analytics & Trends', path: '/analytics', icon: BarChart3 },
   { name: 'Notifications', path: '/notifications', icon: Bell },
@@ -115,13 +115,14 @@ export const Sidebar: React.FC<SidebarProps> = ({ mobileOpen = false, onCloseMob
                 key={item.path}
                 to={item.path}
                 onClick={onCloseMobile}
-                className={({ isActive }) =>
-                  `flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium transition-all ${
-                    isActive
+                className={({ isActive }) => {
+                  const isMatch = isActive || (item.path === '/facilities' && typeof window !== 'undefined' && window.location.pathname.startsWith('/buildings'));
+                  return `flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium transition-all ${
+                    isMatch
                       ? 'bg-blue-50 text-blue-700 font-semibold shadow-xs'
                       : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80'
-                  }`
-                }
+                  }`;
+                }}
               >
                 <Icon className="w-4 h-4 shrink-0 text-slate-500" />
                 <span>{item.name}</span>

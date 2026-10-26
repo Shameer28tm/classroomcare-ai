@@ -189,7 +189,7 @@ export const Overview: React.FC = () => {
             <Clock className="w-4 h-4 text-emerald-600" />
           </div>
           <div className="text-2xl font-bold font-mono text-slate-900">
-            {analytics?.sla_compliance_rate || 100}%
+            {analytics?.sla_compliance_rate != null ? `${analytics.sla_compliance_rate}%` : '0%'}
           </div>
           <div className="text-[10px] text-emerald-700 mt-1">Within target SLA</div>
         </div>
@@ -200,7 +200,7 @@ export const Overview: React.FC = () => {
             <TrendingUp className="w-4 h-4 text-blue-600" />
           </div>
           <div className="text-2xl font-bold font-mono text-slate-900">
-            {analytics?.average_resolution_hours || 4.8}h
+            {analytics?.average_resolution_hours != null ? `${Number(analytics.average_resolution_hours).toFixed(1)}h` : '0.0h'}
           </div>
           <div className="text-[10px] text-slate-500 mt-1">Mean Time to Resolution</div>
         </div>
@@ -222,27 +222,34 @@ export const Overview: React.FC = () => {
             </span>
           </div>
           <div className="h-56 w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={analytics?.daily_trend || []}>
-                <defs>
-                  <linearGradient id="colorReported" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#2563EB" stopOpacity={0.25} />
-                    <stop offset="95%" stopColor="#2563EB" stopOpacity={0} />
-                  </linearGradient>
-                  <linearGradient id="colorResolved" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#10B981" stopOpacity={0.25} />
-                    <stop offset="95%" stopColor="#10B981" stopOpacity={0} />
-                  </linearGradient>
-                </defs>
-                <XAxis dataKey="date" stroke="#94A3B8" fontSize={11} tickLine={false} />
-                <YAxis stroke="#94A3B8" fontSize={11} tickLine={false} />
-                <Tooltip
-                  contentStyle={{ backgroundColor: '#FFFFFF', borderColor: '#E2E8F0', borderRadius: '8px', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)' }}
-                />
-                <Area type="monotone" dataKey="reported" stroke="#2563EB" strokeWidth={2} fillOpacity={1} fill="url(#colorReported)" name="Reported" />
-                <Area type="monotone" dataKey="resolved" stroke="#10B981" strokeWidth={2} fillOpacity={1} fill="url(#colorResolved)" name="Resolved" />
-              </AreaChart>
-            </ResponsiveContainer>
+            {analytics?.daily_trend && analytics.daily_trend.length > 0 && analytics.daily_trend.some(d => (d.reported || 0) > 0 || (d.resolved || 0) > 0) ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={analytics.daily_trend}>
+                  <defs>
+                    <linearGradient id="colorReported" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#2563EB" stopOpacity={0.25} />
+                      <stop offset="95%" stopColor="#2563EB" stopOpacity={0} />
+                    </linearGradient>
+                    <linearGradient id="colorResolved" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#10B981" stopOpacity={0.25} />
+                      <stop offset="95%" stopColor="#10B981" stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <XAxis dataKey="date" stroke="#94A3B8" fontSize={11} tickLine={false} />
+                  <YAxis stroke="#94A3B8" fontSize={11} tickLine={false} allowDecimals={false} />
+                  <Tooltip
+                    contentStyle={{ backgroundColor: '#FFFFFF', borderColor: '#E2E8F0', borderRadius: '8px', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)' }}
+                  />
+                  <Area type="monotone" dataKey="reported" stroke="#2563EB" strokeWidth={2} fillOpacity={1} fill="url(#colorReported)" name="Reported" />
+                  <Area type="monotone" dataKey="resolved" stroke="#10B981" strokeWidth={2} fillOpacity={1} fill="url(#colorResolved)" name="Resolved" />
+                </AreaChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="h-full flex flex-col items-center justify-center text-slate-400 text-xs">
+                <Clock className="w-8 h-8 text-slate-300 mb-2" />
+                <span>No maintenance activity recorded over the past 7 days.</span>
+              </div>
+            )}
           </div>
         </div>
 
@@ -254,16 +261,23 @@ export const Overview: React.FC = () => {
             </h3>
             <p className="text-[11px] text-slate-500 mb-4">Volume breakdown across trades</p>
             <div className="h-52 w-full">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={categoryChartData} layout="vertical">
-                  <XAxis type="number" stroke="#94A3B8" fontSize={10} tickLine={false} />
-                  <YAxis type="category" dataKey="name" stroke="#64748B" fontSize={10} width={80} tickLine={false} />
-                  <Tooltip
-                    contentStyle={{ backgroundColor: '#FFFFFF', borderColor: '#E2E8F0', borderRadius: '8px', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)' }}
-                  />
-                  <Bar dataKey="count" fill="#3B82F6" radius={[0, 4, 4, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
+              {categoryChartData.length > 0 && categoryChartData.some(c => c.count > 0) ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={categoryChartData} layout="vertical">
+                    <XAxis type="number" stroke="#94A3B8" fontSize={10} tickLine={false} allowDecimals={false} />
+                    <YAxis type="category" dataKey="name" stroke="#64748B" fontSize={10} width={80} tickLine={false} />
+                    <Tooltip
+                      contentStyle={{ backgroundColor: '#FFFFFF', borderColor: '#E2E8F0', borderRadius: '8px', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)' }}
+                    />
+                    <Bar dataKey="count" fill="#3B82F6" radius={[0, 4, 4, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="h-full flex flex-col items-center justify-center text-slate-400 text-xs">
+                  <Wrench className="w-8 h-8 text-slate-300 mb-2" />
+                  <span>No trade category incidents logged.</span>
+                </div>
+              )}
             </div>
           </div>
         </div>

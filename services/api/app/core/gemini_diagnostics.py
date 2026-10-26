@@ -55,38 +55,40 @@ class GeminiDiagnostics:
         if not test_live:
             return status_info
 
-        # Perform minimal non-destructive live probe
-        try:
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/{settings.GEMINI_MODEL}:generateContent?key={api_key}"
-            payload = {
-                "contents": [{"parts": [{"text": "Respond with 'OK' only for system health check."}]}],
-                "generationConfig": {"maxOutputTokens": 5, "temperature": 0.0}
-            }
-            with httpx.Client(timeout=8.0) as client:
-                resp = client.post(url, json=payload)
-                if resp.status_code == 200:
-                    status_info["status"] = "LIVE_TEST_PASSED"
-                    status_info["live_tested"] = True
-                    status_info["detail"] = "Successfully connected to Gemini API and received valid generative response."
-                elif resp.status_code == 429:
-                    status_info["status"] = "FAILED (Rate Limit / Quota Exceeded)"
-                    status_info["live_tested"] = True
-                    status_info["detail"] = "Gemini API returned HTTP 429: Resource exhausted or quota limit reached."
-                elif resp.status_code == 400 or resp.status_code == 403:
-                    status_info["status"] = "FAILED (Authentication Error)"
-                    status_info["live_tested"] = True
-                    status_info["detail"] = f"Gemini API returned HTTP {resp.status_code}: Invalid API key or unauthorized model access."
-                else:
-                    status_info["status"] = f"FAILED (HTTP {resp.status_code})"
-                    status_info["live_tested"] = True
-                    status_info["detail"] = f"Gemini API returned unexpected status code {resp.status_code}."
-        except httpx.TimeoutException:
-            status_info["status"] = "FAILED (Timeout)"
-            status_info["live_tested"] = True
-            status_info["detail"] = "Gemini API request timed out after 8.0 seconds."
-        except Exception as e:
-            status_info["status"] = "FAILED (Network Error)"
-            status_info["live_tested"] = True
-            status_info["detail"] = f"Unable to reach Google API endpoints: {str(e)[:80]}"
+        # Perform minimal non-destructive live probe across available models
+        models_to_probe = [settings.GEMINI_MODEL, "gemini-3.5-flash-lite", "gemini-3.6-flash", "gemini-3-flash-preview", "gemini-flash-latest"]
+        unique_models = list(dict.fromkeys(models_to_probe))
+        
+        last_error = None
+        for mod in unique_models:
+            try:
+                url = f"https://generativelanguage.googleapis.com/v1beta/models/{mod}:generateContent?key={api_key}"
+                payload = {
+                    "contents": [{"parts": [{"text": "Respond with 'OK' only for system health check."}]}],
+                    "generationConfig": {"maxOutputTokens": 5, "temperature": 0.0}
+                }
+                with httpx.Client(timeout=6.0) as client:
+                    resp = client.post(url, json=payload)
+                    if resp.status_code == 200:
+                        status_info["status"] = "LIVE_TEST_PASSED"
+                        status_info["live_tested"] = True
+                        status_info["model"] = mod
+                        status_info["detail"] = f"Successfully connected to Gemini API ({mod}) and received valid generative response."
+                        return status_info
+                    elif resp.status_code in [429, 503]:
+                        last_error = f"HTTP {resp.status_code}: Rate limit / temporary load on {mod}."
+                    elif resp.status_code in [400, 403]:
+                        status_info["status"] = "FAILED (Authentication Error)"
+                        status_info["live_tested"] = True
+                        status_info["detail"] = f"Gemini API returned HTTP {resp.status_code}: Invalid API key or unauthorized access."
+                        return status_info
+                    else:
+                        last_error = f"HTTP {resp.status_code} on {mod}."
+            except Exception as e:
+                last_error = str(e)[:80]
+                continue
 
+        status_info["status"] = "FAILED"
+        status_info["live_tested"] = True
+        status_info["detail"] = f"Gemini live test could not complete: {last_error or 'No response from models'}"
         return status_info

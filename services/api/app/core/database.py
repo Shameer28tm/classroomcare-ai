@@ -324,6 +324,14 @@ class CampusRepository:
             return [a for a in self.assets.values() if a.room_id == room_id]
         return list(self.assets.values())
 
+    def add_building(self, building: Building) -> Building:
+        self.buildings[building.id] = building
+        return building
+
+    def add_room(self, room: Room) -> Room:
+        self.rooms[room.id] = room
+        return room
+
     def create_ticket(
         self,
         ticket_in: MaintenanceRequestCreate,
@@ -577,15 +585,54 @@ class CampusRepository:
         for t in tickets:
             by_bld[t.building_name] = by_bld.get(t.building_name, 0) + 1
 
-        compliance = 94.2 if len(tickets) > 0 else 100.0
+        # Calculate real SLA compliance rate
+        if tickets:
+            compliance = round(((len(tickets) - breached_cnt) / len(tickets)) * 100.0, 1)
+        else:
+            compliance = 100.0
 
-        daily_trend = [
-            {"date": "Mon", "reported": 4, "resolved": 3},
-            {"date": "Tue", "reported": 6, "resolved": 5},
-            {"date": "Wed", "reported": 5, "resolved": 4},
-            {"date": "Thu", "reported": 8, "resolved": 7},
-            {"date": "Fri", "reported": len(tickets), "resolved": resolved_cnt},
-        ]
+        # Calculate real Mean Time to Resolution from resolved/closed requests
+        resolved_tickets = [t for t in tickets if t.status in [RequestStatus.RESOLVED, RequestStatus.CLOSED]]
+        if resolved_tickets:
+            durations = []
+            for t in resolved_tickets:
+                try:
+                    c_at = datetime.fromisoformat(t.created_at.replace("Z", "+00:00"))
+                    u_at = datetime.fromisoformat(t.updated_at.replace("Z", "+00:00"))
+                    dur = max(0.1, (u_at - c_at).total_seconds() / 3600.0)
+                    durations.append(dur)
+                except Exception:
+                    durations.append(1.0)
+            avg_res_hours = round(sum(durations) / len(durations), 1)
+        else:
+            avg_res_hours = 0.0
+
+        # Calculate real technician utilization based on active dispatches
+        active_dispatches = sum(1 for t in tickets if t.status in [RequestStatus.ASSIGNED, RequestStatus.IN_PROGRESS, RequestStatus.AWAITING_PARTS])
+        tech_utilization = round(min(100.0, (active_dispatches / 5.0) * 100.0), 1) if active_dispatches > 0 else 0.0
+
+        # Build real daily trend across last 7 days from ticket creation dates
+        now = datetime.now(timezone.utc)
+        daily_map: Dict[str, Dict[str, Any]] = {}
+        for i in range(6, -1, -1):
+            day = now - timedelta(days=i)
+            day_str = day.strftime("%a")
+            day_key = day.strftime("%Y-%m-%d")
+            daily_map[day_key] = {"date": day_str, "reported": 0, "resolved": 0}
+
+        for t in tickets:
+            try:
+                c_key = t.created_at[:10]
+                if c_key in daily_map:
+                    daily_map[c_key]["reported"] += 1
+                if t.status in [RequestStatus.RESOLVED, RequestStatus.CLOSED]:
+                    u_key = t.updated_at[:10]
+                    if u_key in daily_map:
+                        daily_map[u_key]["resolved"] += 1
+            except Exception:
+                pass
+
+        daily_trend = list(daily_map.values())
 
         return AnalyticsOverview(
             open_requests=open_cnt,
@@ -594,8 +641,8 @@ class CampusRepository:
             critical_safety_incidents=safety_cnt,
             sla_breaches=breached_cnt,
             sla_compliance_rate=compliance,
-            average_resolution_hours=4.8,
-            technician_utilization_rate=82.5,
+            average_resolution_hours=avg_res_hours,
+            technician_utilization_rate=tech_utilization,
             issues_by_category=by_cat,
             issues_by_building=by_bld,
             daily_trend=daily_trend

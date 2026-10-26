@@ -40,6 +40,7 @@ export const App: React.FC = () => {
             <Route path="knowledge" element={<KnowledgeBase />} />
             <Route path="technician" element={<TechnicianWorkspace />} />
             <Route path="facilities" element={<Facilities />} />
+            <Route path="buildings" element={<Facilities />} />
             <Route path="sla" element={<SlaMonitoring />} />
             <Route path="analytics" element={<Analytics />} />
             <Route path="notifications" element={<Notifications />} />

@@ -168,9 +168,25 @@ export const api = {
     return await parseResponseOrThrow<Building[]>(res, `Failed to load buildings for campus ${campusId}`);
   },
 
+  async createBuilding(building: Building): Promise<Building> {
+    const res = await safeFetch('/facilities/buildings', {
+      method: 'POST',
+      body: JSON.stringify(building),
+    });
+    return await parseResponseOrThrow<Building>(res, 'Failed to create campus building record');
+  },
+
   async getRooms(buildingId: string): Promise<Room[]> {
     const res = await safeFetch(`/facilities/rooms?building_id=${encodeURIComponent(buildingId)}`);
     return await parseResponseOrThrow<Room[]>(res, `Failed to load rooms for building ${buildingId}`);
+  },
+
+  async createRoom(room: Room): Promise<Room> {
+    const res = await safeFetch('/facilities/rooms', {
+      method: 'POST',
+      body: JSON.stringify(room),
+    });
+    return await parseResponseOrThrow<Room>(res, 'Failed to create room record');
   },
 
   async getAssets(roomId?: string): Promise<Asset[]> {

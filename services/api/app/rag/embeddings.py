@@ -7,7 +7,7 @@ class EmbeddingProvider:
         raise NotImplementedError
 
 class GeminiEmbeddingProvider(EmbeddingProvider):
-    def __init__(self, api_key: str, model: str = "text-embedding-004"):
+    def __init__(self, api_key: str, model: str = "gemini-embedding-001"):
         self.api_key = api_key
         self.model = model
 
@@ -15,20 +15,31 @@ class GeminiEmbeddingProvider(EmbeddingProvider):
         # If no key, fallback safely to deterministic mock embeddings
         if not self.api_key or self.api_key.startswith("your-"):
             return MockEmbeddingProvider().embed_text(text)
-        try:
-            import httpx
-            # Call Google Gemini embedding endpoint
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/{self.model}:embedContent?key={self.api_key}"
-            payload = {
-                "model": f"models/{self.model}",
-                "content": {"parts": [{"text": text}]}
-            }
-            resp = httpx.post(url, json=payload, timeout=10.0)
-            if resp.status_code == 200:
-                data = resp.json()
-                return data["embedding"]["values"]
-        except Exception:
-            pass
+        
+        models_to_try = [self.model, "gemini-embedding-001", "gemini-embedding-2", "text-embedding-004"]
+        # Remove duplicates while preserving order
+        unique_models = list(dict.fromkeys(models_to_try))
+        
+        import httpx
+        for mod in unique_models:
+            try:
+                url = f"https://generativelanguage.googleapis.com/v1beta/models/{mod}:embedContent?key={self.api_key}"
+                payload = {
+                    "model": f"models/{mod}",
+                    "content": {"parts": [{"text": text}]},
+                    "outputDimensionality": settings.EMBEDDING_DIMENSION
+                }
+                resp = httpx.post(url, json=payload, timeout=8.0)
+                if resp.status_code == 200:
+                    data = resp.json()
+                    values = data.get("embedding", {}).get("values", [])
+                    if values and len(values) == settings.EMBEDDING_DIMENSION:
+                        return values
+                    elif values and len(values) > settings.EMBEDDING_DIMENSION:
+                        return values[:settings.EMBEDDING_DIMENSION]
+            except Exception:
+                continue
+
         return MockEmbeddingProvider().embed_text(text)
 
 class MockEmbeddingProvider(EmbeddingProvider):

@@ -23,6 +23,7 @@ $$ LANGUAGE sql STABLE;
 
 -- 1. Maintenance Requests RLS Policies
 -- Read Policy
+DROP POLICY IF EXISTS "Campus isolated read for maintenance requests" ON maintenance_requests;
 CREATE POLICY "Campus isolated read for maintenance requests"
 ON maintenance_requests FOR SELECT
 USING (
@@ -35,6 +36,7 @@ USING (
 );
 
 -- Insert Policy
+DROP POLICY IF EXISTS "Authorized users can submit maintenance requests" ON maintenance_requests;
 CREATE POLICY "Authorized users can submit maintenance requests"
 ON maintenance_requests FOR INSERT
 WITH CHECK (
@@ -43,6 +45,7 @@ WITH CHECK (
 );
 
 -- Update Policy (Managers, Admins, or assigned technicians)
+DROP POLICY IF EXISTS "Managers and assigned technicians can update requests" ON maintenance_requests;
 CREATE POLICY "Managers and assigned technicians can update requests"
 ON maintenance_requests FOR UPDATE
 USING (
@@ -54,6 +57,7 @@ USING (
 );
 
 -- 2. Work Orders RLS Policies
+DROP POLICY IF EXISTS "Work orders read access" ON work_orders;
 CREATE POLICY "Work orders read access"
 ON work_orders FOR SELECT
 USING (
@@ -68,6 +72,7 @@ USING (
     )
 );
 
+DROP POLICY IF EXISTS "Technicians can update assigned work orders" ON work_orders;
 CREATE POLICY "Technicians can update assigned work orders"
 ON work_orders FOR UPDATE
 USING (
@@ -76,10 +81,12 @@ USING (
 );
 
 -- 3. Knowledge Documents RLS Policies
+DROP POLICY IF EXISTS "Campus members can read approved knowledge documents" ON knowledge_documents;
 CREATE POLICY "Campus members can read approved knowledge documents"
 ON knowledge_documents FOR SELECT
 USING (campus_id = get_auth_campus_id());
 
+DROP POLICY IF EXISTS "Managers and Admins can upload knowledge documents" ON knowledge_documents;
 CREATE POLICY "Managers and Admins can upload knowledge documents"
 ON knowledge_documents FOR INSERT
 WITH CHECK (
@@ -88,6 +95,7 @@ WITH CHECK (
 );
 
 -- 4. Notifications RLS Policies
+DROP POLICY IF EXISTS "Users can only read own notifications" ON notifications;
 CREATE POLICY "Users can only read own notifications"
 ON notifications FOR SELECT
 USING (
@@ -96,6 +104,7 @@ USING (
 );
 
 -- 5. Audit Logs RLS Policies
+DROP POLICY IF EXISTS "Audit logs visible to safety officers, managers, and admins" ON audit_logs;
 CREATE POLICY "Audit logs visible to safety officers, managers, and admins"
 ON audit_logs FOR SELECT
 USING (

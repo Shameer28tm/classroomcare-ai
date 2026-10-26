@@ -184,3 +184,86 @@ def test_authorized_asset_creation_succeeds():
     )
     assert res.status_code == 201
     assert res.json()["id"] == "asset-test-scope-01"
+
+def test_authorized_building_creation_and_listing():
+    payload = {
+        "id": "bld-mech-test-01",
+        "campus_id": "campus-main-01",
+        "name": "Mechanical & Thermal Science Complex",
+        "code": "MECH-01",
+        "total_floors": 4,
+        "emergency_shutoff_location": "Ground Floor South Entrance Utility Cabinet"
+    }
+    res = client.post(
+        "/api/v1/facilities/buildings",
+        json=payload,
+        headers={"X-User-Role": "facilities_manager"}
+    )
+    assert res.status_code == 201
+    data = res.json()
+    assert data["id"] == "bld-mech-test-01"
+    assert data["name"] == payload["name"]
+
+    # Verify building is retrievable via GET
+    get_res = client.get("/api/v1/facilities/buildings?campus_id=campus-main-01")
+    assert get_res.status_code == 200
+    bld_ids = [b["id"] for b in get_res.json()]
+    assert "bld-mech-test-01" in bld_ids
+
+def test_unauthorized_building_creation_blocked():
+    payload = {
+        "id": "bld-unauth-01",
+        "campus_id": "campus-main-01",
+        "name": "Unauthorized Building Entry",
+        "code": "UNAUTH-01",
+        "total_floors": 1
+    }
+    res = client.post(
+        "/api/v1/facilities/buildings",
+        json=payload,
+        headers={"X-User-Role": "student_faculty"}
+    )
+    assert res.status_code == 403
+    assert "lacks required permission 'facilities:manage'" in res.json()["detail"]
+
+def test_authorized_room_creation_succeeds():
+    payload = {
+        "id": "room-mech-101",
+        "campus_id": "campus-main-01",
+        "building_id": "bld-mech-test-01",
+        "room_number": "101",
+        "floor": 1,
+        "name": "Thermodynamics Instrumentation Lab",
+        "room_type": "Laboratory",
+        "capacity": 45
+    }
+    res = client.post(
+        "/api/v1/facilities/rooms",
+        json=payload,
+        headers={"X-User-Role": "facilities_manager"}
+    )
+    assert res.status_code == 201
+    assert res.json()["room_number"] == "101"
+
+def test_analytics_metrics_calculation_consistency():
+    res = client.get("/api/v1/analytics/overview")
+    assert res.status_code == 200
+    data = res.json()
+    assert "open_requests" in data
+    assert "in_progress" in data
+    assert "resolved_today" in data
+    assert "critical_safety_incidents" in data
+    assert "average_resolution_hours" in data
+    assert "sla_compliance_rate" in data
+    assert "technician_utilization_rate" in data
+    assert "daily_trend" in data
+    assert len(data["daily_trend"]) == 7
+    for day in data["daily_trend"]:
+        assert "date" in day
+        assert "reported" in day
+        assert "resolved" in day
+        assert isinstance(day["reported"], int)
+        assert isinstance(day["resolved"], int)
+    assert data["sla_compliance_rate"] >= 0.0 and data["sla_compliance_rate"] <= 100.0
+    assert data["average_resolution_hours"] >= 0.0
+

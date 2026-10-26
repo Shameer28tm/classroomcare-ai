@@ -36,9 +36,9 @@ class Settings(BaseSettings):
     # LLM & Embeddings
     LLM_PROVIDER: str = Field(default="mock") # "gemini" or "mock"
     GEMINI_API_KEY: str = Field(default="")
-    GEMINI_MODEL: str = Field(default="gemini-1.5-flash")
+    GEMINI_MODEL: str = Field(default="gemini-3.5-flash-lite")
     EMBEDDING_PROVIDER: str = Field(default="mock") # "gemini" or "mock"
-    EMBEDDING_MODEL: str = Field(default="text-embedding-004")
+    EMBEDDING_MODEL: str = Field(default="gemini-embedding-001")
     EMBEDDING_DIMENSION: int = Field(default=768)
     
     # RAG Settings

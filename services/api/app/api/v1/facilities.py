@@ -12,22 +12,33 @@ def list_campuses():
 
 @router.get("/buildings", response_model=List[Building])
 def list_buildings(
-    campus_id: str = Query("campus-main-01"),
-    user: AuthenticatedUser = Depends(get_current_user)
+    campus_id: str = Query("campus-main-01")
 ):
     return repository.get_buildings(campus_id)
 
+@router.post("/buildings", response_model=Building, status_code=status.HTTP_201_CREATED)
+def create_building(
+    building: Building,
+    user: AuthenticatedUser = Depends(require_permission("facilities:manage"))
+):
+    return repository.add_building(building)
+
 @router.get("/rooms", response_model=List[Room])
 def list_rooms(
-    building_id: str = Query(...),
-    user: AuthenticatedUser = Depends(get_current_user)
+    building_id: str = Query(...)
 ):
     return repository.get_rooms(building_id)
 
+@router.post("/rooms", response_model=Room, status_code=status.HTTP_201_CREATED)
+def create_room(
+    room: Room,
+    user: AuthenticatedUser = Depends(require_permission("facilities:manage"))
+):
+    return repository.add_room(room)
+
 @router.get("/assets", response_model=List[Asset])
 def list_assets(
-    room_id: Optional[str] = Query(None),
-    user: AuthenticatedUser = Depends(get_current_user)
+    room_id: Optional[str] = Query(None)
 ):
     return repository.get_assets(room_id)
 

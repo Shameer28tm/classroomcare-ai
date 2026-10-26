@@ -1,8 +1,11 @@
 -- Migration: 20261026000002_pgvector_setup.sql
 -- Description: pgvector extension, knowledge documents, chunks, and hybrid search indexes
 
--- Enable vector extension
-CREATE EXTENSION IF NOT EXISTS vector;
+-- Enable vector extension safely in extensions schema
+CREATE SCHEMA IF NOT EXISTS extensions;
+CREATE EXTENSION IF NOT EXISTS vector WITH SCHEMA extensions;
+GRANT USAGE ON SCHEMA extensions TO postgres, anon, authenticated, service_role;
+SET search_path TO public, extensions;
 
 -- Knowledge Documents
 CREATE TABLE IF NOT EXISTS knowledge_documents (
@@ -28,7 +31,7 @@ CREATE TABLE IF NOT EXISTS document_chunks (
     chunk_index INT NOT NULL,
     content TEXT NOT NULL,
     metadata JSONB DEFAULT '{}'::jsonb,
-    embedding vector(768),
+    embedding extensions.vector(768),
     tsv tsvector GENERATED ALWAYS AS (to_tsvector('english', content)) STORED,
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -38,7 +41,7 @@ CREATE TABLE IF NOT EXISTS document_chunks (
 CREATE INDEX IF NOT EXISTS idx_chunks_tsv ON document_chunks USING GIN(tsv);
 
 -- 2. HNSW index for pgvector cosine distance
-CREATE INDEX IF NOT EXISTS idx_chunks_embedding_hnsw ON document_chunks USING hnsw (embedding vector_cosine_ops);
+CREATE INDEX IF NOT EXISTS idx_chunks_embedding_hnsw ON document_chunks USING hnsw (embedding extensions.vector_cosine_ops);
 
 -- Agent Execution Runs
 CREATE TABLE IF NOT EXISTS agent_runs (

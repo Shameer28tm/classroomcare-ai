@@ -1,5 +1,6 @@
 from typing import List, Optional, Dict, Any
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
+import uuid
 from datetime import datetime
 from enum import Enum
 
@@ -56,25 +57,47 @@ class Asset(BaseModel):
     next_pm_due: Optional[str] = None
 
 class Room(BaseModel):
-    id: str
+    id: str = Field(default="")
     campus_id: str
     building_id: str
     room_number: str
-    floor: int
-    name: str
-    capacity: int
-    room_type: str # "Lecture Hall" | "Chemistry Lab" | "Computer Lab" | "Seminar Room"
+    floor: int = 1
+    name: str = ""
+    capacity: int = 40
+    room_type: str = "Classroom" # "Lecture Hall" | "Chemistry Lab" | "Computer Lab" | "Seminar Room"
     status: str = "Available" # "Available" | "Maintenance Lockout" | "Occupied"
     assets: List[Asset] = Field(default_factory=list)
 
+    @model_validator(mode="before")
+    @classmethod
+    def handle_room_defaults(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            if not data.get("id"):
+                data["id"] = f"room-{uuid.uuid4().hex[:8]}"
+            if not data.get("name") and data.get("room_number"):
+                data["name"] = f"Room {data['room_number']}"
+        return data
+
 class Building(BaseModel):
-    id: str
+    id: str = Field(default="")
     campus_id: str
     code: str
     name: str
-    floors: int
-    emergency_shutoff_coords: str
+    floors: int = 1
+    emergency_shutoff_coords: str = ""
     rooms: List[Room] = Field(default_factory=list)
+
+    @model_validator(mode="before")
+    @classmethod
+    def handle_building_defaults(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            if "total_floors" in data and "floors" not in data:
+                data["floors"] = data["total_floors"]
+            if "emergency_shutoff_location" in data and "emergency_shutoff_coords" not in data:
+                data["emergency_shutoff_coords"] = data["emergency_shutoff_location"]
+            if not data.get("id"):
+                data["id"] = f"bld-{uuid.uuid4().hex[:8]}"
+        return data
 
 class Campus(BaseModel):
     id: str
