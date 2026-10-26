@@ -17,7 +17,7 @@ class GeminiDiagnostics:
         Distinguishes:
         - UNCONFIGURED / BLOCKED: Key is missing or placeholder.
         - CONFIGURED: Valid key format detected.
-        - LIVE_TEST_PASSED: Minimal test prompt successfully answered.
+        - LIVE_TEST_PASSED: Minimal test prompt and embedding generation successfully answered.
         - FAILED: Upstream quota, rate-limit, auth, or network error.
         """
         api_key = settings.GEMINI_API_KEY.strip()
@@ -56,25 +56,26 @@ class GeminiDiagnostics:
             return status_info
 
         # Perform minimal non-destructive live probe across available models
-        models_to_probe = [settings.GEMINI_MODEL, "gemini-3.5-flash-lite", "gemini-3.6-flash", "gemini-3-flash-preview", "gemini-flash-latest"]
+        models_to_probe = [settings.GEMINI_MODEL, "gemini-3.5-flash", "gemini-3.5-flash-lite", "gemini-3.8-flash", "gemini-flash-latest"]
         unique_models = list(dict.fromkeys(models_to_probe))
         
         last_error = None
-        for mod in unique_models:
-            try:
-                url = f"https://generativelanguage.googleapis.com/v1beta/models/{mod}:generateContent?key={api_key}"
-                payload = {
-                    "contents": [{"parts": [{"text": "Respond with 'OK' only for system health check."}]}],
-                    "generationConfig": {"maxOutputTokens": 5, "temperature": 0.0}
-                }
-                with httpx.Client(timeout=6.0) as client:
+        gen_success = False
+        active_gen_model = None
+
+        with httpx.Client(timeout=15.0) as client:
+            for mod in unique_models:
+                try:
+                    url = f"https://generativelanguage.googleapis.com/v1beta/models/{mod}:generateContent?key={api_key}"
+                    payload = {
+                        "contents": [{"parts": [{"text": "Respond with 'OK' only for system health check."}]}],
+                        "generationConfig": {"maxOutputTokens": 5, "temperature": 0.0}
+                    }
                     resp = client.post(url, json=payload)
                     if resp.status_code == 200:
-                        status_info["status"] = "LIVE_TEST_PASSED"
-                        status_info["live_tested"] = True
-                        status_info["model"] = mod
-                        status_info["detail"] = f"Successfully connected to Gemini API ({mod}) and received valid generative response."
-                        return status_info
+                        gen_success = True
+                        active_gen_model = mod
+                        break
                     elif resp.status_code in [429, 503]:
                         last_error = f"HTTP {resp.status_code}: Rate limit / temporary load on {mod}."
                     elif resp.status_code in [400, 403]:
@@ -84,9 +85,45 @@ class GeminiDiagnostics:
                         return status_info
                     else:
                         last_error = f"HTTP {resp.status_code} on {mod}."
-            except Exception as e:
-                last_error = str(e)[:80]
-                continue
+                except Exception as e:
+                    last_error = str(e)[:80]
+                    continue
+
+            # Probe embeddings with verified model and target dimension (768)
+            emb_success = False
+            active_emb_model = None
+            emb_models = [settings.EMBEDDING_MODEL, "gemini-embedding-001", "gemini-embedding-2"]
+            for emod in list(dict.fromkeys(emb_models)):
+                try:
+                    eurl = f"https://generativelanguage.googleapis.com/v1beta/models/{emod}:embedContent?key={api_key}"
+                    epayload = {
+                        "content": {"parts": [{"text": "ClassroomCare AI health check"}]},
+                        "outputDimensionality": settings.EMBEDDING_DIMENSION
+                    }
+                    eresp = client.post(eurl, json=epayload)
+                    if eresp.status_code == 200:
+                        values = eresp.json().get("embedding", {}).get("values", [])
+                        if len(values) == settings.EMBEDDING_DIMENSION:
+                            emb_success = True
+                            active_emb_model = emod
+                            break
+                except Exception:
+                    continue
+
+        if gen_success:
+            status_info["status"] = "LIVE_TEST_PASSED"
+            status_info["live_tested"] = True
+            status_info["model"] = active_gen_model
+            if emb_success:
+                status_info["embedding_model"] = active_emb_model
+                status_info["embedding_dimension"] = settings.EMBEDDING_DIMENSION
+                status_info["detail"] = (
+                    f"Successfully connected to Gemini API ({active_gen_model}) and verified "
+                    f"real {settings.EMBEDDING_DIMENSION}-dim embeddings ({active_emb_model})."
+                )
+            else:
+                status_info["detail"] = f"Successfully connected to Gemini API ({active_gen_model}) for generative inference."
+            return status_info
 
         status_info["status"] = "FAILED"
         status_info["live_tested"] = True

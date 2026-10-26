@@ -16,7 +16,7 @@ class GeminiEmbeddingProvider(EmbeddingProvider):
         if not self.api_key or self.api_key.startswith("your-"):
             return MockEmbeddingProvider().embed_text(text)
         
-        models_to_try = [self.model, "gemini-embedding-001", "gemini-embedding-2", "text-embedding-004"]
+        models_to_try = [self.model, "gemini-embedding-001", "gemini-embedding-2"]
         # Remove duplicates while preserving order
         unique_models = list(dict.fromkeys(models_to_try))
         
@@ -29,7 +29,7 @@ class GeminiEmbeddingProvider(EmbeddingProvider):
                     "content": {"parts": [{"text": text}]},
                     "outputDimensionality": settings.EMBEDDING_DIMENSION
                 }
-                resp = httpx.post(url, json=payload, timeout=8.0)
+                resp = httpx.post(url, json=payload, timeout=12.0)
                 if resp.status_code == 200:
                     data = resp.json()
                     values = data.get("embedding", {}).get("values", [])
@@ -40,6 +40,8 @@ class GeminiEmbeddingProvider(EmbeddingProvider):
             except Exception:
                 continue
 
+        if settings.ENVIRONMENT.lower() == "production" and not settings.ENABLE_DEMO_DATA:
+            raise RuntimeError("Gemini embedding generation failed in production: real provider response required.")
         return MockEmbeddingProvider().embed_text(text)
 
 class MockEmbeddingProvider(EmbeddingProvider):

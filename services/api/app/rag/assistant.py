@@ -100,7 +100,7 @@ class RAGAssistant:
         if settings.LLM_PROVIDER == "gemini" and settings.GEMINI_API_KEY and not settings.GEMINI_API_KEY.startswith("your-"):
             try:
                 import httpx
-                models_to_try = [settings.GEMINI_MODEL, "gemini-3.6-flash", "gemini-3.5-flash-lite", "gemini-3-flash-preview"]
+                models_to_try = [settings.GEMINI_MODEL, "gemini-3.5-flash", "gemini-3.5-flash-lite", "gemini-3.8-flash"]
                 unique_models = list(dict.fromkeys(models_to_try))
                 prompt = (
                     "You are ClassroomCare AI, an autonomous facilities maintenance assistant for Noorul Islam Centre for Higher Education.\n"
@@ -117,7 +117,7 @@ class RAGAssistant:
                 for mod in unique_models:
                     try:
                         url = f"https://generativelanguage.googleapis.com/v1beta/models/{mod}:generateContent?key={settings.GEMINI_API_KEY}"
-                        with httpx.Client(timeout=6.0) as client:
+                        with httpx.Client(timeout=12.0) as client:
                             resp = client.post(url, json=payload)
                             if resp.status_code == 200:
                                 data = resp.json()

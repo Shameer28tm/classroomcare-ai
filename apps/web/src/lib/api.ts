@@ -91,6 +91,12 @@ async function getAuthHeaders(): Promise<Record<string, string>> {
     headers['X-User-Email'] = role === 'facilities_manager' ? 'demo.facmgr@local.test' : `demo.${role}@local.test`;
   }
 
+  // 3. Fallback bearer token for interactive demo/guest session requests
+  if (!headers['Authorization']) {
+    const role = getActiveRole();
+    headers['Authorization'] = `Bearer session-token-${role}`;
+  }
+
   return headers;
 }
 

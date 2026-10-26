@@ -317,8 +317,13 @@ class CampusRepository:
     def _get_supabase_headers(self) -> Optional[Dict[str, str]]:
         if not settings.SUPABASE_URL or not settings.SUPABASE_URL.startswith("https://"):
             return None
-        # Favor verified valid anon key, fallback to service key
-        key = settings.SUPABASE_ANON_KEY or settings.SUPABASE_SERVICE_ROLE_KEY
+        # Server-side persistence: favor valid service-role key (bypasses RLS for backend tasks), fallback to anon key
+        has_service_key = bool(
+            settings.SUPABASE_SERVICE_ROLE_KEY
+            and len(settings.SUPABASE_SERVICE_ROLE_KEY) > 20
+            and not settings.SUPABASE_SERVICE_ROLE_KEY.startswith("your-")
+        )
+        key = settings.SUPABASE_SERVICE_ROLE_KEY if has_service_key else settings.SUPABASE_ANON_KEY
         if not key or len(key) < 20:
             return None
         return {
