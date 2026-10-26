@@ -17,6 +17,7 @@ export const Notifications: React.FC = () => {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
   const [filterUnread, setFilterUnread] = useState(false);
 
   const fetchNotifs = async () => {
@@ -37,23 +38,29 @@ export const Notifications: React.FC = () => {
   }, []);
 
   const handleMarkRead = async (id: string) => {
+    setActionError(null);
     try {
       await api.markNotificationRead(id);
       setNotifications((prev) =>
         prev.map((n) => (n.id === id ? { ...n, read: true } : n))
       );
-    } catch {}
+    } catch (err: any) {
+      setActionError(err?.message || 'Failed to update notification state');
+    }
   };
 
   const handleMarkAllRead = async () => {
-    for (const n of notifications) {
-      if (!n.read) {
-        try {
+    setActionError(null);
+    try {
+      for (const n of notifications) {
+        if (!n.read) {
           await api.markNotificationRead(n.id);
-        } catch {}
+        }
       }
+      setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+    } catch (err: any) {
+      setActionError(err?.message || 'Failed to mark all notifications as read');
     }
-    setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
   };
 
   if (loading) {
@@ -103,6 +110,19 @@ export const Notifications: React.FC = () => {
             className="px-3 py-1 bg-white hover:bg-red-100 text-red-700 border border-red-300 rounded font-semibold text-xs"
           >
             Retry
+          </button>
+        </div>
+      )}
+
+      {actionError && (
+        <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-xs text-red-800 flex items-center justify-between gap-2">
+          <span>{actionError}</span>
+          <button
+            type="button"
+            onClick={() => setActionError(null)}
+            className="text-red-600 hover:text-red-800 font-bold"
+          >
+            ✕
           </button>
         </div>
       )}

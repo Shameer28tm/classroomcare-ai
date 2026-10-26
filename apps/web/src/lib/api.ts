@@ -3,10 +3,47 @@ import {
   DocumentChunk, RAGQueryResponse, AgentRun, Notification, AuditLog,
   AnalyticsOverview, UserRole, RequestStatus, RequestPriority, RequestCategory
 } from '../types';
+import { supabase } from './supabase';
 
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1';
+/**
+ * Normalizes and validates the API base URL.
+ * Never silently falls back to localhost in production.
+ */
+export function getNormalizedApiBase(): { url: string; error?: string } {
+  const raw = import.meta.env.VITE_API_URL;
+  if (raw && typeof raw === 'string' && raw.trim().length > 0) {
+    const trimmed = raw.trim().replace(/\/+$/, '');
+    // Prevent duplicate /api/v1 segments
+    const normalized = trimmed.endsWith('/api/v1') ? trimmed : `${trimmed}/api/v1`;
+    return { url: normalized };
+  }
 
-// Role & Campus Session State (Stored in localStorage for interactive role testing)
+  // Development environment fallback
+  if (import.meta.env.DEV) {
+    return { url: 'http://localhost:8000/api/v1' };
+  }
+
+  // Production with no configured API URL
+  return {
+    url: '',
+    error: 'Production backend API is not configured. Please set VITE_API_URL in your Vercel project environment variables (targeting your FastAPI service).'
+  };
+}
+
+export function isDemoModeActive(): boolean {
+  return import.meta.env.DEV || import.meta.env.VITE_ENABLE_DEMO_FIXTURES === 'true';
+}
+
+export function getApiConfigurationStatus(): { isConfigured: boolean; url: string; error?: string } {
+  const { url, error } = getNormalizedApiBase();
+  return {
+    isConfigured: !error && Boolean(url),
+    url,
+    error,
+  };
+}
+
+// Role & Campus Session State (Used in local interactive demo mode)
 export function getActiveRole(): UserRole {
   return (localStorage.getItem('classroomcare_role') as UserRole) || 'facilities_manager';
 }
@@ -25,53 +62,124 @@ export function setActiveCampusId(campusId: string) {
   window.dispatchEvent(new Event('campus_changed'));
 }
 
-function getHeaders(): HeadersInit {
-  const role = getActiveRole();
-  return {
+/**
+ * Resolves request headers, including Supabase Auth Bearer tokens when available.
+ */
+async function getAuthHeaders(): Promise<Record<string, string>> {
+  const headers: Record<string, string> = {
     'Content-Type': 'application/json',
-    'X-User-Role': role,
-    'X-Campus-Id': getActiveCampusId(),
-    'X-User-Id': role === 'technician' ? 'tech-hvac-001' : 'usr-facmgr-001',
-    'X-User-Email': role === 'facilities_manager' ? 'demo.facmgr@local.test' : `demo.${role}@local.test`,
   };
+
+  // 1. Check for real Supabase authentication session
+  if (supabase) {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.access_token) {
+        headers['Authorization'] = `Bearer ${session.access_token}`;
+      }
+    } catch {
+      // Graceful fallback if session lookup fails
+    }
+  }
+
+  // 2. Demo role context (strictly in non-production demo mode)
+  if (isDemoModeActive()) {
+    const role = getActiveRole();
+    headers['X-User-Role'] = role;
+    headers['X-Campus-Id'] = getActiveCampusId();
+    headers['X-User-Id'] = role === 'technician' ? 'tech-hvac-001' : 'usr-facmgr-001';
+    headers['X-User-Email'] = role === 'facilities_manager' ? 'demo.facmgr@local.test' : `demo.${role}@local.test`;
+  }
+
+  return headers;
+}
+
+/**
+ * Executes a network fetch with timeout, normalized URL, and user-friendly error wrapping.
+ */
+async function safeFetch(endpoint: string, options: RequestInit = {}, timeoutMs = 15000): Promise<Response> {
+  const { url: baseUrl, error: configError } = getNormalizedApiBase();
+  if (configError) {
+    throw new Error(configError);
+  }
+
+  const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
+  const fullUrl = `${baseUrl}${cleanEndpoint}`;
+
+  const authHeaders = await getAuthHeaders();
+  const mergedHeaders: Record<string, string> = {
+    ...authHeaders,
+    ...((options.headers as Record<string, string>) || {}),
+  };
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const response = await fetch(fullUrl, {
+      ...options,
+      headers: mergedHeaders,
+      signal: controller.signal,
+    });
+    return response;
+  } catch (err: any) {
+    if (err.name === 'AbortError') {
+      throw new Error(`API request timed out after ${timeoutMs / 1000}s. Check backend server connectivity.`);
+    }
+    if (err instanceof TypeError && err.message.toLowerCase().includes('fetch')) {
+      throw new Error(`Unable to connect to ClassroomCare API at ${baseUrl}. Ensure the backend service is running and CORS allows ${window.location.origin}.`);
+    }
+    throw err;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
+/**
+ * Parses JSON response with detailed error message extraction.
+ */
+async function parseResponseOrThrow<T>(res: Response, defaultErrorMsg: string): Promise<T> {
+  if (!res.ok) {
+    let detail = defaultErrorMsg;
+    try {
+      const body = await res.json();
+      detail = body.detail || body.message || `${defaultErrorMsg} (HTTP ${res.status})`;
+    } catch {
+      detail = `${defaultErrorMsg} (HTTP ${res.status}: ${res.statusText || 'Server Error'})`;
+    }
+    throw new Error(detail);
+  }
+  try {
+    return await res.json() as T;
+  } catch {
+    throw new Error('Malformed JSON received from ClassroomCare API.');
+  }
 }
 
 export const api = {
-  // Facilities
+  // Facilities & Campus Infrastructure
   async getCampuses(): Promise<Campus[]> {
-    const res = await fetch(`${API_BASE}/facilities/campuses`, { headers: getHeaders() });
-    if (!res.ok) {
-      throw new Error(`Failed to load campuses from server (HTTP ${res.status}). Verify backend service and database connectivity.`);
-    }
-    return await res.json();
+    const res = await safeFetch('/facilities/campuses');
+    return await parseResponseOrThrow<Campus[]>(res, 'Failed to load campuses from server');
   },
 
   async getBuildings(campusId: string): Promise<Building[]> {
-    const res = await fetch(`${API_BASE}/facilities/buildings?campus_id=${campusId}`, { headers: getHeaders() });
-    if (!res.ok) {
-      throw new Error(`Failed to load buildings for campus ${campusId} (HTTP ${res.status}).`);
-    }
-    return await res.json();
+    const res = await safeFetch(`/facilities/buildings?campus_id=${encodeURIComponent(campusId)}`);
+    return await parseResponseOrThrow<Building[]>(res, `Failed to load buildings for campus ${campusId}`);
   },
 
   async getRooms(buildingId: string): Promise<Room[]> {
-    const res = await fetch(`${API_BASE}/facilities/rooms?building_id=${buildingId}`, { headers: getHeaders() });
-    if (!res.ok) {
-      throw new Error(`Failed to load rooms for building ${buildingId} (HTTP ${res.status}).`);
-    }
-    return await res.json();
+    const res = await safeFetch(`/facilities/rooms?building_id=${encodeURIComponent(buildingId)}`);
+    return await parseResponseOrThrow<Room[]>(res, `Failed to load rooms for building ${buildingId}`);
   },
 
   async getAssets(roomId?: string): Promise<Asset[]> {
-    const url = roomId ? `${API_BASE}/facilities/assets?room_id=${roomId}` : `${API_BASE}/facilities/assets`;
-    const res = await fetch(url, { headers: getHeaders() });
-    if (!res.ok) {
-      throw new Error(`Failed to load assets from server (HTTP ${res.status}).`);
-    }
-    return await res.json();
+    const endpoint = roomId ? `/facilities/assets?room_id=${encodeURIComponent(roomId)}` : '/facilities/assets';
+    const res = await safeFetch(endpoint);
+    return await parseResponseOrThrow<Asset[]>(res, 'Failed to load equipment assets');
   },
 
-  // Tickets
+  // Maintenance Requests / Tickets
   async getTickets(params?: { category?: string; priority?: string; status?: string; building_id?: string; assigned_to?: string }): Promise<MaintenanceRequest[]> {
     const query = new URLSearchParams({ campus_id: getActiveCampusId() });
     if (params?.category) query.append('category', params.category);
@@ -80,20 +188,14 @@ export const api = {
     if (params?.building_id) query.append('building_id', params.building_id);
     if (params?.assigned_to) query.append('assigned_to', params.assigned_to);
 
-    const res = await fetch(`${API_BASE}/tickets?${query.toString()}`, { headers: getHeaders() });
-    if (!res.ok) {
-      throw new Error(`Failed to retrieve maintenance requests (HTTP ${res.status}). Check server status.`);
-    }
-    return await res.json();
+    const res = await safeFetch(`/tickets?${query.toString()}`);
+    return await parseResponseOrThrow<MaintenanceRequest[]>(res, 'Failed to retrieve maintenance requests');
   },
 
   async getTicket(id: string): Promise<MaintenanceRequest | null> {
-    const res = await fetch(`${API_BASE}/tickets/${id}`, { headers: getHeaders() });
+    const res = await safeFetch(`/tickets/${encodeURIComponent(id)}`);
     if (res.status === 404) return null;
-    if (!res.ok) {
-      throw new Error(`Failed to fetch ticket ${id} (HTTP ${res.status}).`);
-    }
-    return await res.json();
+    return await parseResponseOrThrow<MaintenanceRequest>(res, `Failed to fetch ticket ${id}`);
   },
 
   async createTicket(payload: {
@@ -106,161 +208,122 @@ export const api = {
     category?: RequestCategory;
     priority?: RequestPriority;
   }): Promise<MaintenanceRequest> {
-    const res = await fetch(`${API_BASE}/tickets`, {
+    const res = await safeFetch('/tickets', {
       method: 'POST',
-      headers: getHeaders(),
       body: JSON.stringify(payload),
     });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({ detail: 'Failed to create maintenance request' }));
-      throw new Error(err.detail || 'Failed to create maintenance request');
-    }
-    return await res.json();
+    return await parseResponseOrThrow<MaintenanceRequest>(res, 'Failed to create maintenance request');
   },
 
   async assignTicket(ticketId: string, technicianId: string, technicianName: string): Promise<MaintenanceRequest> {
-    const res = await fetch(`${API_BASE}/tickets/${ticketId}/assign`, {
+    const res = await safeFetch(`/tickets/${encodeURIComponent(ticketId)}/assign`, {
       method: 'POST',
-      headers: getHeaders(),
       body: JSON.stringify({ technician_id: technicianId, technician_name: technicianName }),
     });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({ detail: 'Failed to assign technician' }));
-      throw new Error(err.detail || 'Failed to assign technician');
-    }
-    return await res.json();
+    return await parseResponseOrThrow<MaintenanceRequest>(res, 'Failed to assign technician');
   },
 
   async updateTicketStatus(ticketId: string, status: RequestStatus, notes?: string): Promise<MaintenanceRequest> {
-    const res = await fetch(`${API_BASE}/tickets/${ticketId}/status`, {
+    const res = await safeFetch(`/tickets/${encodeURIComponent(ticketId)}/status`, {
       method: 'PATCH',
-      headers: getHeaders(),
       body: JSON.stringify({ status, notes }),
     });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({ detail: 'Failed to update request status' }));
-      throw new Error(err.detail || 'Failed to update request status');
-    }
-    return await res.json();
+    return await parseResponseOrThrow<MaintenanceRequest>(res, 'Failed to update request status');
   },
 
   async recordEvidence(ticketId: string, payload: { notes: string; parts_used?: any[]; evidence_urls?: string[]; checklist_completed?: boolean }): Promise<MaintenanceRequest> {
-    const res = await fetch(`${API_BASE}/tickets/${ticketId}/evidence`, {
+    const res = await safeFetch(`/tickets/${encodeURIComponent(ticketId)}/evidence`, {
       method: 'POST',
-      headers: getHeaders(),
       body: JSON.stringify(payload),
     });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({ detail: 'Failed to record maintenance evidence' }));
-      throw new Error(err.detail || 'Failed to record maintenance evidence');
-    }
-    return await res.json();
+    return await parseResponseOrThrow<MaintenanceRequest>(res, 'Failed to record maintenance evidence');
   },
 
   async verifyResolution(ticketId: string, approved: boolean, feedback?: string): Promise<MaintenanceRequest> {
-    const res = await fetch(`${API_BASE}/tickets/${ticketId}/verify`, {
+    const res = await safeFetch(`/tickets/${encodeURIComponent(ticketId)}/verify`, {
       method: 'POST',
-      headers: getHeaders(),
       body: JSON.stringify({ approved, feedback }),
     });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({ detail: 'Failed to verify resolution' }));
-      throw new Error(err.detail || 'Failed to verify resolution');
-    }
-    return await res.json();
+    return await parseResponseOrThrow<MaintenanceRequest>(res, 'Failed to verify resolution');
   },
 
-  // Knowledge & RAG
+  // Knowledge & RAG Assistant
   async getDocuments(): Promise<KnowledgeDocument[]> {
-    const res = await fetch(`${API_BASE}/knowledge/documents?campus_id=${getActiveCampusId()}`, { headers: getHeaders() });
-    if (!res.ok) {
-      throw new Error(`Failed to load knowledge documents (HTTP ${res.status}).`);
-    }
-    return await res.json();
+    const res = await safeFetch(`/knowledge/documents?campus_id=${encodeURIComponent(getActiveCampusId())}`);
+    return await parseResponseOrThrow<KnowledgeDocument[]>(res, 'Failed to load knowledge documents');
   },
 
   async getChunks(documentId?: string): Promise<DocumentChunk[]> {
-    const url = documentId ? `${API_BASE}/knowledge/chunks?document_id=${documentId}` : `${API_BASE}/knowledge/chunks`;
-    const res = await fetch(url, { headers: getHeaders() });
-    if (!res.ok) {
-      throw new Error(`Failed to load document chunks (HTTP ${res.status}).`);
-    }
-    return await res.json();
+    const endpoint = documentId
+      ? `/knowledge/chunks?document_id=${encodeURIComponent(documentId)}`
+      : '/knowledge/chunks';
+    const res = await safeFetch(endpoint);
+    return await parseResponseOrThrow<DocumentChunk[]>(res, 'Failed to load document chunks');
   },
 
   async queryRAGAssistant(query: string, categoryFilter?: string): Promise<RAGQueryResponse> {
-    const res = await fetch(`${API_BASE}/knowledge/query`, {
+    const res = await safeFetch('/knowledge/query', {
       method: 'POST',
-      headers: getHeaders(),
       body: JSON.stringify({
         campus_id: getActiveCampusId(),
         query,
         category_filter: categoryFilter,
       }),
     });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({ detail: 'Failed to query knowledge assistant' }));
-      throw new Error(err.detail || 'Failed to query knowledge assistant');
-    }
-    return await res.json();
+    return await parseResponseOrThrow<RAGQueryResponse>(res, 'Failed to query technical knowledge assistant');
   },
 
-  // Agent Runs
+  async uploadDocument(formData: FormData): Promise<KnowledgeDocument> {
+    const { url: baseUrl, error: configError } = getNormalizedApiBase();
+    if (configError) throw new Error(configError);
+
+    const authHeaders = await getAuthHeaders();
+    delete authHeaders['Content-Type'];
+
+    const res = await fetch(`${baseUrl}/knowledge/upload`, {
+      method: 'POST',
+      headers: authHeaders,
+      body: formData,
+    });
+    return await parseResponseOrThrow<KnowledgeDocument>(res, 'Failed to upload knowledge document');
+  },
+
+  // Autonomous Agent
   async getAgentRuns(): Promise<AgentRun[]> {
-    const res = await fetch(`${API_BASE}/agent/runs?campus_id=${getActiveCampusId()}`, { headers: getHeaders() });
-    if (!res.ok) {
-      throw new Error(`Failed to retrieve autonomous agent activity (HTTP ${res.status}).`);
-    }
-    return await res.json();
+    const res = await safeFetch(`/agent/runs?campus_id=${encodeURIComponent(getActiveCampusId())}`);
+    return await parseResponseOrThrow<AgentRun[]>(res, 'Failed to retrieve autonomous agent activity');
   },
 
   async triggerAgentTriage(ticketId: string): Promise<AgentRun> {
-    const res = await fetch(`${API_BASE}/agent/triage/${ticketId}`, {
+    const res = await safeFetch(`/agent/triage/${encodeURIComponent(ticketId)}`, {
       method: 'POST',
-      headers: getHeaders(),
     });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({ detail: 'Failed to trigger agent triage' }));
-      throw new Error(err.detail || 'Failed to trigger agent triage');
-    }
-    return await res.json();
+    return await parseResponseOrThrow<AgentRun>(res, 'Failed to trigger autonomous agent triage');
   },
 
-  // Analytics, Notifications, Audit
+  // Analytics, Notifications & Audit Logs
   async getAnalytics(): Promise<AnalyticsOverview> {
-    const res = await fetch(`${API_BASE}/analytics/overview?campus_id=${getActiveCampusId()}`, { headers: getHeaders() });
-    if (!res.ok) {
-      throw new Error(`Failed to load live analytics overview (HTTP ${res.status}).`);
-    }
-    return await res.json();
+    const res = await safeFetch(`/analytics/overview?campus_id=${encodeURIComponent(getActiveCampusId())}`);
+    return await parseResponseOrThrow<AnalyticsOverview>(res, 'Failed to load operations analytics overview');
   },
 
   async getNotifications(): Promise<Notification[]> {
-    const res = await fetch(`${API_BASE}/notifications?campus_id=${getActiveCampusId()}`, { headers: getHeaders() });
-    if (!res.ok) {
-      throw new Error(`Failed to load notifications (HTTP ${res.status}).`);
-    }
-    return await res.json();
+    const res = await safeFetch(`/notifications?campus_id=${encodeURIComponent(getActiveCampusId())}`);
+    return await parseResponseOrThrow<Notification[]>(res, 'Failed to load notification feed');
   },
 
   async markNotificationRead(id: string): Promise<void> {
-    const res = await fetch(`${API_BASE}/notifications/${id}/read`, {
+    const res = await safeFetch(`/notifications/${encodeURIComponent(id)}/read`, {
       method: 'POST',
-      headers: getHeaders(),
     });
-    if (!res.ok) {
-      throw new Error(`Failed to update notification state (HTTP ${res.status}).`);
-    }
+    await parseResponseOrThrow<{ status: string }>(res, 'Failed to update notification state');
   },
 
   async getAuditLogs(entityType?: string): Promise<AuditLog[]> {
-    const url = entityType
-      ? `${API_BASE}/audit/logs?campus_id=${getActiveCampusId()}&entity_type=${entityType}`
-      : `${API_BASE}/audit/logs?campus_id=${getActiveCampusId()}`;
-    const res = await fetch(url, { headers: getHeaders() });
-    if (!res.ok) {
-      throw new Error(`Failed to load audit logs (HTTP ${res.status}).`);
-    }
-    return await res.json();
+    const endpoint = entityType
+      ? `/audit/logs?campus_id=${encodeURIComponent(getActiveCampusId())}&entity_type=${encodeURIComponent(entityType)}`
+      : `/audit/logs?campus_id=${encodeURIComponent(getActiveCampusId())}`;
+    const res = await safeFetch(endpoint);
+    return await parseResponseOrThrow<AuditLog[]>(res, 'Failed to load compliance audit logs');
   },
 };

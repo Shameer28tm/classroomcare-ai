@@ -28,6 +28,7 @@ export const TicketDetailDrawer: React.FC<TicketDetailDrawerProps> = ({
 }) => {
   const [assigning, setAssigning] = useState(false);
   const [verifying, setVerifying] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
   const [selectedTech, setSelectedTech] = useState('tech-hvac-001');
 
   if (!ticket) return null;
@@ -36,6 +37,7 @@ export const TicketDetailDrawer: React.FC<TicketDetailDrawerProps> = ({
 
   const handleAssign = async () => {
     setAssigning(true);
+    setActionError(null);
     try {
       const techName =
         selectedTech === 'tech-hvac-001'
@@ -47,13 +49,15 @@ export const TicketDetailDrawer: React.FC<TicketDetailDrawerProps> = ({
       await api.assignTicket(ticket.id, selectedTech, techName);
       setAssigning(false);
       onUpdated();
-    } catch {
+    } catch (err: any) {
       setAssigning(false);
+      setActionError(err?.message || 'Failed to assign technician');
     }
   };
 
   const handleVerify = async (approved: boolean) => {
     setVerifying(true);
+    setActionError(null);
     try {
       await api.verifyResolution(
         ticket.id,
@@ -62,8 +66,9 @@ export const TicketDetailDrawer: React.FC<TicketDetailDrawerProps> = ({
       );
       setVerifying(false);
       onUpdated();
-    } catch {
+    } catch (err: any) {
       setVerifying(false);
+      setActionError(err?.message || 'Failed to verify resolution');
     }
   };
 
@@ -100,6 +105,18 @@ export const TicketDetailDrawer: React.FC<TicketDetailDrawerProps> = ({
 
         {/* Drawer Body */}
         <div className="p-6 space-y-6 flex-1 text-slate-800">
+          {/* Action Error Banner */}
+          {actionError && (
+            <div className="p-3.5 bg-red-50 border border-red-200 rounded-xl flex items-center justify-between gap-3 text-xs text-red-800">
+              <span>{actionError}</span>
+              <button
+                onClick={() => setActionError(null)}
+                className="text-red-600 hover:text-red-800 font-bold"
+              >
+                ✕
+              </button>
+            </div>
+          )}
           {/* Safety Alert Callout if active */}
           {ticket.is_safety_hazard && (
             <div className="p-4 rounded-xl bg-red-50 border border-red-200 space-y-2">

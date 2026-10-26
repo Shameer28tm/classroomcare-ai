@@ -10,7 +10,7 @@ import {
   Send,
   AlertTriangle
 } from 'lucide-react';
-import { api, getActiveCampusId } from '../lib/api';
+import { api } from '../lib/api';
 import { KnowledgeDocument, DocumentChunk, RAGQueryResponse } from '../types';
 import { LoadingSkeleton } from '../components/common/LoadingSkeleton';
 import { NIU_CONFIG } from '../config/institution';
@@ -23,6 +23,7 @@ export const KnowledgeBase: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [answering, setAnswering] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [queryError, setQueryError] = useState<string | null>(null);
 
   // Upload Modal State
   const [isUploadOpen, setIsUploadOpen] = useState(false);
@@ -30,6 +31,7 @@ export const KnowledgeBase: React.FC = () => {
   const [uploadCategory, setUploadCategory] = useState('OEM Manual');
   const [uploadContent, setUploadContent] = useState('');
   const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
 
   const loadDocs = async () => {
     setLoading(true);
@@ -56,45 +58,37 @@ export const KnowledgeBase: React.FC = () => {
     e.preventDefault();
     if (!query.trim()) return;
     setAnswering(true);
+    setQueryError(null);
     try {
       const res = await api.queryRAGAssistant(query);
       setResponse(res);
-      setAnswering(false);
-    } catch {
+    } catch (err: any) {
+      setQueryError(err?.message || 'Failed to query technical knowledge assistant.');
+    } finally {
       setAnswering(false);
     }
   };
 
   const handleUploadSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!uploadTitle || !uploadContent) return;
+    if (!uploadTitle.trim() || !uploadContent.trim()) return;
     setUploading(true);
+    setUploadError(null);
     try {
       const form = new FormData();
-      form.append('title', uploadTitle);
+      form.append('title', uploadTitle.trim());
       form.append('category', uploadCategory);
-      form.append('content', uploadContent);
+      form.append('content', uploadContent.trim());
       form.append('version', 'v1.0');
 
-      const res = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1'}/knowledge/upload`, {
-        method: 'POST',
-        headers: {
-          'X-User-Role': 'facilities_manager',
-          'X-Campus-Id': getActiveCampusId(),
-          'X-User-Id': 'usr-facmgr-001',
-          'X-User-Email': 'demo.facmgr@local.test',
-        },
-        body: form,
-      });
-
-      if (res.ok) {
-        setIsUploadOpen(false);
-        setUploadTitle('');
-        setUploadContent('');
-        loadDocs();
-      }
-      setUploading(false);
-    } catch {
+      await api.uploadDocument(form);
+      setIsUploadOpen(false);
+      setUploadTitle('');
+      setUploadContent('');
+      await loadDocs();
+    } catch (err: any) {
+      setUploadError(err?.message || 'Failed to upload knowledge document.');
+    } finally {
       setUploading(false);
     }
   };
@@ -190,6 +184,14 @@ export const KnowledgeBase: React.FC = () => {
             Test Abstention Protocol (Unknown)
           </button>
         </div>
+
+        {/* Query Error Display */}
+        {queryError && (
+          <div className="p-4 bg-red-50 border border-red-200 rounded-xl flex items-center gap-2 text-xs text-red-800">
+            <AlertCircle className="w-4 h-4 text-red-600 shrink-0" />
+            <span>{queryError}</span>
+          </div>
+        )}
 
         {/* Diagnostic Answer Display */}
         {response && (
@@ -299,6 +301,12 @@ export const KnowledgeBase: React.FC = () => {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-xs p-4">
           <div className="w-full max-w-lg bg-white border border-slate-200 rounded-xl shadow-xl p-6 relative">
             <h2 className="text-base font-bold text-slate-900 mb-3">Upload Technical Document / Manual</h2>
+            {uploadError && (
+              <div className="p-3 mb-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 text-xs text-red-800">
+                <AlertCircle className="w-4 h-4 text-red-600 shrink-0" />
+                <span>{uploadError}</span>
+              </div>
+            )}
             <form onSubmit={handleUploadSubmit} className="space-y-3">
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">Document Title *</label>

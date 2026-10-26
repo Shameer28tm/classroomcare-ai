@@ -1,6 +1,7 @@
 from typing import Optional, List, Dict, Set
 from fastapi import HTTPException, Security, Depends, status, Header
 from pydantic import BaseModel, Field
+from app.core.config import settings
 
 class UserRole:
     STUDENT_FACULTY = "student_faculty"
@@ -90,24 +91,46 @@ def get_current_user(
     Validates Authorization Bearer tokens and checks token expiration/revocation.
     In development and demo mode, defaults to Facilities Manager for the primary campus if headers are omitted.
     """
-    # 1. Token validation if Authorization header is present
-    if authorization is not None:
-        if not authorization.startswith("Bearer "):
+    # Normalize values if called directly outside FastAPI runtime
+    auth_str = authorization if isinstance(authorization, str) else None
+    user_id_str = x_user_id if isinstance(x_user_id, str) else None
+    user_role_str = x_user_role if isinstance(x_user_role, str) else None
+    campus_id_str = x_campus_id if isinstance(x_campus_id, str) else None
+    user_email_str = x_user_email if isinstance(x_user_email, str) else None
+
+    # 1. Production environment gate: require real authentication when demo mode is disabled
+    is_production = settings.ENVIRONMENT.lower() == "production" and not settings.ENABLE_DEMO_DATA
+    if is_production and not auth_str:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Production authentication required. Please provide a valid Authorization: Bearer token."
+        )
+
+    # 2. Token validation if Authorization header is present
+    if auth_str is not None:
+        if not auth_str.startswith("Bearer "):
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid authorization scheme. Expected 'Bearer <token>'."
             )
-        token = authorization[7:].strip()
+        token = auth_str[7:].strip()
         if token in ["invalid", "expired", "revoked", "malformed", ""]:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail=f"Authentication token is expired, invalid, or revoked ({token if token else 'empty'}). Please re-authenticate."
             )
 
-    role = x_user_role or UserRole.FACILITIES_MANAGER
-    campus_id = x_campus_id or "campus-main-01"
-    user_id = x_user_id or "usr-facmgr-001"
-    email = x_user_email or "demo.facmgr@local.test"
+    # 3. Resolve identity: In production, disallow untrusted client headers from claiming elevated roles
+    if is_production:
+        role = UserRole.STUDENT_FACULTY
+        campus_id = campus_id_str or "NIU-KUMARACOIL"
+        user_id = user_id_str or "usr-authenticated-prod"
+        email = user_email_str or "user@niuniv.com"
+    else:
+        role = user_role_str or UserRole.FACILITIES_MANAGER
+        campus_id = campus_id_str or "campus-main-01"
+        user_id = user_id_str or "usr-facmgr-001"
+        email = user_email_str or "demo.facmgr@local.test"
     
     # Retrieve assigned permissions for the role
     perms = list(ROLE_PERMISSIONS.get(role, set()))

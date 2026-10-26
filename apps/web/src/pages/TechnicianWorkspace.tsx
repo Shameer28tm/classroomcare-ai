@@ -36,6 +36,7 @@ export const TechnicianWorkspace: React.FC = () => {
   const [workNotes, setWorkNotes] = useState('Cleaned intake filters, adjusted V-belt tension to 0.5" deflection, verified cooling cycle.');
   const [submitting, setSubmitting] = useState(false);
   const [submitSuccess, setSubmitSuccess] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
 
   const fetchWorkOrders = async () => {
     setLoading(true);
@@ -69,17 +70,21 @@ export const TechnicianWorkspace: React.FC = () => {
 
   const handleStartWork = async () => {
     if (!selectedTicket) return;
+    setFormError(null);
     try {
       const updated = await api.updateTicketStatus(selectedTicket.id, 'In Progress', 'Technician started physical repairs.');
       setSelectedTicket(updated);
-      fetchWorkOrders();
-    } catch {}
+      await fetchWorkOrders();
+    } catch (err: any) {
+      setFormError(err?.message || 'Failed to update work order status to In Progress.');
+    }
   };
 
   const handleSubmitResolution = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedTicket) return;
     setSubmitting(true);
+    setFormError(null);
     try {
       const updated = await api.recordEvidence(selectedTicket.id, {
         notes: workNotes,
@@ -91,9 +96,10 @@ export const TechnicianWorkspace: React.FC = () => {
       setSubmitting(false);
       setSubmitSuccess(true);
       setTimeout(() => setSubmitSuccess(false), 3000);
-      fetchWorkOrders();
-    } catch {
+      await fetchWorkOrders();
+    } catch (err: any) {
       setSubmitting(false);
+      setFormError(err?.message || 'Failed to record maintenance evidence.');
     }
   };
 
@@ -268,6 +274,22 @@ export const TechnicianWorkspace: React.FC = () => {
                   <Package className="w-4 h-4 text-blue-600" />
                   Record Parts Used & Resolution Notes
                 </h3>
+
+                {formError && (
+                  <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-xs text-red-800 font-medium flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <AlertCircle className="w-4 h-4 text-red-600 shrink-0" />
+                      <span>{formError}</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setFormError(null)}
+                      className="text-red-600 hover:text-red-800 font-bold"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                )}
 
                 {submitSuccess && (
                   <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-lg text-xs text-emerald-800 font-semibold flex items-center gap-2">

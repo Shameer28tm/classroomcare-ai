@@ -21,6 +21,7 @@ export const AgentActivity: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [triaging, setTriaging] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [triageError, setTriageError] = useState<string | null>(null);
 
   const loadData = async () => {
     setLoading(true);
@@ -52,13 +53,15 @@ export const AgentActivity: React.FC = () => {
   const handleTriggerTriage = async () => {
     if (!selectedTicketId) return;
     setTriaging(true);
+    setTriageError(null);
     try {
       const newRun = await api.triggerAgentTriage(selectedTicketId);
       setTriaging(false);
       setRuns([newRun, ...runs]);
       setSelectedRun(newRun);
-    } catch {
+    } catch (err: any) {
       setTriaging(false);
+      setTriageError(err?.message || 'Failed to trigger agent triage execution.');
     }
   };
 
@@ -112,6 +115,21 @@ export const AgentActivity: React.FC = () => {
             className="px-3 py-1 bg-white hover:bg-red-100 text-red-700 border border-red-300 rounded font-semibold text-xs"
           >
             Retry
+          </button>
+        </div>
+      )}
+
+      {triageError && (
+        <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl flex items-center justify-between gap-3 text-xs text-amber-900">
+          <div className="flex items-center gap-2 font-medium">
+            <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+            <span>Agent Execution Notice: {triageError}</span>
+          </div>
+          <button
+            onClick={() => setTriageError(null)}
+            className="text-amber-700 hover:text-amber-900 font-bold"
+          >
+            ✕
           </button>
         </div>
       )}

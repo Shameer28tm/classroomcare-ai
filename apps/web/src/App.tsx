@@ -1,5 +1,5 @@
 import React from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AppLayout } from './components/layout/AppLayout';
 
@@ -15,6 +15,7 @@ import { Analytics } from './pages/Analytics';
 import { Notifications } from './pages/Notifications';
 import { Admin } from './pages/Admin';
 import { UserGuide } from './pages/UserGuide';
+import { NotFound } from './pages/NotFound';
 import { OnboardingTour } from './components/onboarding/OnboardingTour';
 
 const queryClient = new QueryClient({
@@ -44,7 +45,7 @@ export const App: React.FC = () => {
             <Route path="notifications" element={<Notifications />} />
             <Route path="admin" element={<Admin />} />
             <Route path="guide" element={<UserGuide />} />
-            <Route path="*" element={<Navigate to="/" replace />} />
+            <Route path="*" element={<NotFound />} />
           </Route>
         </Routes>
       </BrowserRouter>
