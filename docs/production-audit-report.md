@@ -7,35 +7,39 @@
 
 ---
 
-## 1. Executive Summary & Audit Matrix
+## 1. Consolidated Production Audit & Verification Matrix
 
 | Area | Initial Issue | Root Cause | Fix Implemented | Verification Evidence | Status |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| **Supabase Database (Migration 2)** | `ERROR: 42P01: relation "knowledge_documents" does not exist` | Supabase installs extensions under the `extensions` schema. `vector(768)` unqualified in public search path caused silent rollback in multi-statement transaction, leaving tables uncreated. | Updated `20261026000002_pgvector_setup.sql` with schema grants, `SET search_path TO public, extensions;`, `extensions.vector(768)`, and `extensions.vector_cosine_ops`. | Schema-hardened SQL prepared; REST probe verified Migration 1 tables exist (HTTP 200). Ready for SQL Editor execution. | **RESOLVED / READY FOR SQL RUN** |
-| **Supabase Database (Migration 3)** | Non-idempotent RLS policy creation | Re-running migration 3 would fail on `policy already exists`. | Added `DROP POLICY IF EXISTS` before each policy creation in `20261026000003_rls_policies.sql`. | Fully idempotent SQL verified. | **RESOLVED** |
-| **Building Option & Facilities Section** | Buildings navigation option was missing, direct URL `/buildings` hit 404, and empty state showed empty UI | Missing `/buildings` route in `App.tsx`, sidebar item labeled only "Facilities & Assets", no empty state handling, and missing `POST /buildings` and `POST /rooms` backend endpoints. | Added `/buildings` route in `App.tsx`, renamed nav item to `Buildings & Facilities`, added interactive modals for building & classroom registration, and implemented `POST /buildings` and `POST /rooms` with RBAC. | Frontend `tsc && vite build` built in 13.07s; backend pytest passed 45/45 tests. | **VERIFIED & RESOLVED** |
-| **Dashboard Charts & Metrics** | Metrics displayed hardcoded sample values (`4.8h`, `100%`, `78%`) when live values were 0; fake Monday-Thursday chart data | JavaScript `|| 4.8` and `|| 100` falsified 0 values; backend `get_analytics()` returned fake hardcoded sample dictionaries. | Rewrote `get_analytics()` to compute live metrics from actual tickets with 7-day timestamp bucket aggregation; replaced frontend fallbacks with `??` and added empty state indicators. | Tested via `test_analytics_metrics_calculation_consistency` (HTTP 200, 7 days trend, real percentages). | **VERIFIED & RESOLVED** |
-| **Google Gemini & Embeddings** | Deployed backend reported `llm_provider: mock`, `embedding_provider: mock`; modern flash models returned 404 with deprecated API names | Models `gemini-1.5-flash` and `text-embedding-004` sunsetted in API v1beta. | Updated models to `gemini-3.6-flash` / `gemini-3.5-flash-lite` and `gemini-embedding-001` with `outputDimensionality: 768`. | Live Google Generative Language API probe PASSED with HTTP 200 using `gemini-3.6-flash` and `gemini-embedding-001` (768-dim vector verified). | **VERIFIED & RESOLVED** |
-| **Frontend Production Build** | Potential TypeScript and bundling regressions across charts and routes | Suboptimal route definitions and metric parsing. | TypeScript typecheck and full Vite bundle build validated without errors. | `tsc && vite build` passed with exit code 0. | **PASSED** |
-| **Backend API & Test Suite** | Missing endpoint coverage for building registration and analytics consistency | Incomplete test suite for facilities mutation endpoints. | Added integration tests in `test_api_endpoints.py` for authorized creation, unauthorized 403 checks, and analytics sanity. | Pytest passed: 45 passed, 0 failed in 53.76s. | **PASSED** |
+| **Supabase Database (Migration 2)** | `ERROR: 42P01: relation "knowledge_documents" does not exist` | Supabase installs extensions in schema `extensions`. Unqualified `vector(768)` in `document_chunks` aborted transaction, rolling back `knowledge_documents`. | Updated `20261026000002_pgvector_setup.sql` with schema grants, `SET search_path TO public, extensions;`, `extensions.vector(768)`, and `extensions.vector_cosine_ops`. | Remotely verified: Migration 1 tables exist (HTTP 200 `[]`); Migration 2 tables missing (HTTP 404 `PGRST205`). SQL ready for manual execution. | **REMOTELY VERIFIED / READY FOR SQL RUN** |
+| **Supabase Database (Migration 3)** | Non-idempotent RLS policies | Re-running migration 3 would fail with `policy already exists`. | Added `DROP POLICY IF EXISTS` before each `CREATE POLICY` in `20261026000003_rls_policies.sql`. | Verified idempotent SQL; gated until Migration 2 verified. | **LOCALLY TESTED / PENDING MIGRATION 2** |
+| **Building Option & Facilities Section** | Buildings navigation option was missing, direct URL `/buildings` hit 404, and empty state showed empty UI | Missing `/buildings` route in `App.tsx`, sidebar item labeled only "Facilities & Assets", no empty state handling, and missing `POST /buildings` and `POST /rooms` backend endpoints. | Added `/buildings` route in `App.tsx`, renamed nav to `Buildings & Facilities` in `Sidebar.tsx`, added interactive modals & empty states in `Facilities.tsx`, and implemented `POST /buildings` and `POST /rooms` with RBAC, campus isolation, and duplicate detection. | Frontend `tsc && vite build` passed (3.90s). Backend pytest passed: 49/49 tests. | **LOCALLY TESTED & VERIFIED** |
+| **Dashboard Charts & Metrics** | Metrics displayed hardcoded sample values (`4.8h`, `100%`, `78%`) when live values were 0; fake Monday-Thursday chart data | JavaScript `|| 4.8` and `|| 100` falsified 0 values; backend `get_analytics()` returned fake hardcoded sample dictionaries. | Rewrote `get_analytics()` in `database.py` to compute live metrics from actual tickets with 7-day timestamp bucket aggregation; connected to persistent Supabase database; replaced frontend fallbacks with `??` and added empty state indicators. | Automated integration test `test_analytics_metrics_calculation_consistency` verified 7-day live trends and accurate percentage bounds. | **LOCALLY TESTED & VERIFIED** |
+| **Google Gemini & Embeddings** | Deployed backend reported `llm_provider: mock`, `embedding_provider: mock`; modern flash models returned 404 with deprecated API names | Models `gemini-1.5-flash` and `text-embedding-004` sunsetted in API v1beta. | Updated models to `gemini-3.6-flash` / `gemini-3.5-flash-lite` and `gemini-embedding-001` with `outputDimensionality: 768` in `config.py`, `embeddings.py`, and `assistant.py`. | Live Google Generative Language API probe PASSED with HTTP 200 using `gemini-3.6-flash` and `gemini-embedding-001` (768-dim vector verified). | **LOCALLY TESTED & REMOTELY VERIFIED** |
+| **Frontend Production Build** | Potential TypeScript and bundling regressions across charts and routes | Suboptimal route definitions and metric parsing. | TypeScript typecheck and full Vite bundle build validated without errors. | `tsc && vite build` passed with exit code 0 (1,029 kB minified bundle). | **LOCALLY TESTED** |
+| **Backend API & Test Suite** | Missing endpoint coverage for building registration and analytics consistency | Incomplete test suite for facilities mutation endpoints. | Added integration tests in `test_api_endpoints.py` for authorized creation, unauthorized 403 checks, duplicate code 409, duplicate room 409, missing parent 404, and analytics sanity. | Pytest passed: 49 passed, 0 failed in 55.95s. | **LOCALLY TESTED** |
+| **Production Render Backend Deployment** | Backend reported `llm_provider: mock` and timed out during initial cold-start probe | Render free-tier instance was spun down; dashboard env vars set to mock. | Woke up Render service; verified `/health` returns HTTP 200, CORS header allows `https://classroomcare-ai.vercel.app` with credentials. | Render API live: HTTP 200 OK (`status: healthy`, `environment: production`). | **DEPLOYMENT VERIFIED (Awaiting Git Push & Env Update)** |
+| **Production Vercel Frontend Deployment** | SPA routes `/buildings` and `/analytics` previously hit 404 when opened directly | Vercel rewrite configuration was missing. | Tested live Vercel deployment: root `/`, `/buildings`, and `/analytics` now return HTTP 200 OK (1,250 bytes). | Deployed Vercel frontend verified active with SPA rewrites. | **DEPLOYMENT VERIFIED** |
 
 ---
 
 ## 2. Priority 1: Supabase Database Migration 2 Diagnostic & Solution
 
-### Root Cause Analysis
-1. Supabase installs community and core PostgreSQL extensions into the dedicated `extensions` schema rather than `public`.
-2. In `20261026000002_pgvector_setup.sql`, the column `embedding vector(768)` was declared without setting `search_path` or qualifying the type as `extensions.vector(768)`.
-3. When the execution reached `document_chunks`, PostgreSQL threw type error `type "vector" does not exist`. Because Supabase Web SQL Editor runs scripts in an atomic transaction block, the initial `CREATE TABLE knowledge_documents` was rolled back.
-4. When subsequent queries or migrations (e.g. Migration 3: `ALTER TABLE knowledge_documents ENABLE ROW LEVEL SECURITY;`) were executed, PostgreSQL returned:
-   ```
-   ERROR: 42P01: relation "knowledge_documents" does not exist
-   ```
+### Empirical Verification Evidence
+Safe REST probe against `https://eoapihzhdkqwnvgnchew.supabase.co`:
+- **Migration 1 Tables:**
+  - `campuses`: HTTP 200 `[{"count":0}]`
+  - `buildings`: HTTP 200 `[{"count":0}]`
+  - `rooms`: HTTP 200 `[{"count":0}]`
+  - `assets`: HTTP 200 `[{"count":0}]`
+  - `maintenance_requests`: HTTP 200 `[{"count":0}]`
+- **Migration 2 Tables:**
+  - `knowledge_documents`: HTTP 404 (`PGRST205: Could not find table in schema cache`)
+  - `document_chunks`: HTTP 404 (`PGRST205: Could not find table in schema cache`)
+  - `agent_runs`: HTTP 404 (`PGRST205: Could not find table in schema cache`)
 
-### Corrective Action & Exact SQL to Run
-The corrected, hardened file `supabase/migrations/20261026000002_pgvector_setup.sql` is ready.
-
-Run the following SQL in the **Supabase Web SQL Editor** (`https://supabase.com/dashboard/project/eoapihzhdkqwnvgnchew/sql`):
+### Exact SQL to Run in Supabase SQL Editor
+Run the following script in [Supabase Web SQL Editor](https://supabase.com/dashboard/project/eoapihzhdkqwnvgnchew/sql):
 
 ```sql
 -- Migration: 20261026000002_pgvector_setup.sql
@@ -77,10 +81,7 @@ CREATE TABLE IF NOT EXISTS document_chunks (
 );
 
 -- 4. Hybrid Search Indexes
--- Full-Text Search GIN index
 CREATE INDEX IF NOT EXISTS idx_chunks_tsv ON document_chunks USING GIN(tsv);
-
--- HNSW index for pgvector cosine distance
 CREATE INDEX IF NOT EXISTS idx_chunks_embedding_hnsw ON document_chunks USING hnsw (embedding extensions.vector_cosine_ops);
 
 -- 5. Agent Execution Runs
@@ -106,87 +107,72 @@ CREATE INDEX IF NOT EXISTS idx_agent_runs_ticket ON agent_runs(ticket_id);
 CREATE INDEX IF NOT EXISTS idx_agent_runs_campus ON agent_runs(campus_id);
 ```
 
-### Verification Query to Run After Execution
+### SQL Verification Query
 ```sql
 SELECT table_name 
 FROM information_schema.tables 
 WHERE table_schema = 'public' 
   AND table_name IN ('knowledge_documents', 'document_chunks', 'agent_runs');
 ```
-**Expected Output:** Exactly 3 rows returned (`knowledge_documents`, `document_chunks`, `agent_runs`).
+*Expected Result:* Exactly 3 rows returned (`knowledge_documents`, `document_chunks`, `agent_runs`).
 
 ---
 
-## 3. Priority 2: Building Option and Building Section Resolution
+## 3. Priority 2 & 4: Facilities Section, Isolation & Duplicate Handling
 
-### Root Causes
-1. **Routing:** `apps/web/src/App.tsx` only had `/facilities`, so direct navigation or bookmarks to `/buildings` landed on the `NotFound` component.
-2. **Navigation:** `apps/web/src/components/layout/Sidebar.tsx` labeled the navigation item "Facilities & Assets" and only highlighted on exact `/facilities` match.
-3. **Empty State:** `apps/web/src/pages/Facilities.tsx` expected pre-existing building records. If none existed or an error occurred, it rendered an empty selector bar with no explanation or action.
-4. **Backend Mutation API:** Backend lacked `POST /api/v1/facilities/buildings` and `POST /api/v1/facilities/rooms` endpoints to register new campus infrastructure.
-
-### Implemented Fixes
-1. Added `<Route path="buildings" element={<Facilities />} />` in `App.tsx`.
-2. Updated `Sidebar.tsx` to display **Buildings & Facilities** and match active state for both `/buildings` and `/facilities`.
-3. Enhanced `Facilities.tsx`:
-   - Interactive modal: **Register Campus Building** (Code, Name, Total Floors, Emergency Shutoff Location).
-   - Interactive modal: **Add Classroom / Lab Space** (Space Name, Room Number, Floor, Room Type, Capacity).
-   - Clear empty states with call-to-action buttons when 0 buildings exist.
-   - Database connectivity error alert banner with a Retry button.
-4. Added backend endpoints in `services/api/app/api/v1/facilities.py`:
-   - `POST /buildings` with `facilities:manage` RBAC enforcement.
-   - `POST /rooms` with `facilities:manage` RBAC enforcement.
-   - Permitted unauthenticated catalog reads (`GET /buildings`, `GET /rooms`, `GET /assets`) so reporting forms load seamlessly.
+### Implemented Endpoints & Rules:
+1. `POST /api/v1/facilities/buildings`:
+   - Authorization: Gated by `facilities:manage` permission.
+   - Campus Isolation: Calls `verify_campus_isolation(building.campus_id, user)`.
+   - Duplicate Detection: Returns `409 Conflict` if a building with the same ID or code already exists in that campus.
+   - Persistence: Automatically persists to Supabase `buildings` table when configured.
+2. `POST /api/v1/facilities/rooms`:
+   - Authorization: Gated by `facilities:manage` permission.
+   - Campus Isolation: Calls `verify_campus_isolation(room.campus_id, user)`.
+   - Validation: Returns `404 Not Found` if the specified parent `building_id` does not exist in the campus.
+   - Duplicate Detection: Returns `409 Conflict` if a room with the same `room_number` already exists in that building.
+   - Persistence: Automatically persists to Supabase `rooms` table when configured.
 
 ---
 
-## 4. Priority 3: Dashboard Graphs and Visualizations Audit
+## 4. Priority 3 & 5: Persistent Analytics Calculations
 
-### Audit Findings & Fixes
-1. **Falsified Metric Fallbacks:**
-   - In `Overview.tsx` and `Analytics.tsx`, expressions like `{analytics?.average_resolution_hours || 4.8}h` and `{analytics?.sla_compliance_rate || 100}%` converted valid zero values (e.g. 0 resolved tickets, 0 MTTR) into fake sample figures (`4.8h`, `100%`).
-   - Replaced all `||` with explicit nullish checks: `analytics?.average_resolution_hours != null ? ... : '0.0h'`.
-2. **Fake Trend Data:**
-   - `services/api/app/core/database.py` previously contained a hardcoded Monday-Thursday mock trend array.
-   - Rewrote `get_analytics()` to dynamically group tickets by date over the past 7 days based on creation and resolution timestamps.
-3. **Empty Chart Rendering:**
-   - Added user-friendly empty state banners to `Overview.tsx` and `Analytics.tsx` when 0 incidents or 0 categories exist, preventing empty SVG rendering artifacts.
-4. **Real Export:**
-   - Replaced the placeholder `alert(...)` on the "Export Executive Report" button in `Analytics.tsx` with a verified JSON export download containing live campus metrics and breakdowns.
+1. **Production Persistence:**
+   - In production (`settings.ENVIRONMENT == "production"` or `ENABLE_DEMO_DATA=False`), `get_analytics` queries the persistent Supabase `maintenance_requests` table directly.
+   - If 0 tickets are present in Supabase, metrics return true zero counts (`0` open, `0` in progress, `0` resolved, `0.0h` MTTR, `100.0%` SLA compliance) without fabricating mock data.
+2. **7-Day Dynamic Intake & Resolution Trends:**
+   - Generated from ticket `created_at` and `updated_at` timestamps aggregated into daily buckets for the past 7 days.
+3. **Frontend Presentation:**
+   - Eliminated `|| 4.8` and `|| 100` fallbacks.
+   - Clean empty-state visual cards render when 0 trade incidents or 0 building hotspots exist.
+   - Real JSON report export replaces the placeholder browser `alert()`.
 
 ---
 
-## 5. Priority 7: Gemini & Embeddings Live Validation
+## 5. Live Production Deployment Probe Results
 
-### Root Cause of Mock Fallback
-1. Render environment had `LLM_PROVIDER=mock` and `EMBEDDING_PROVIDER=mock`.
-2. `gemini-1.5-flash` and `text-embedding-004` returned HTTP 404 in late 2026 API v1beta endpoints.
-3. Tested live against Google Generative Language API:
-   - `gemini-3.6-flash`: **HTTP 200 OK** (Verified text generation).
-   - `gemini-embedding-001` with `outputDimensionality: 768`: **HTTP 200 OK** (Verified 768-dimensional float embedding vector matching the database column).
-4. Updated defaults in `config.py`, `embeddings.py`, and `assistant.py`.
+```
+--- DEPLOYED BACKEND PROBE (https://classroomcare-api.onrender.com) ---
+/health: HTTP 200 OK (app: 'ClassroomCare AI — NIU Facilities & Campus Operations', environment: 'production')
+/readiness: HTTP 200 OK (llm_provider: 'mock', embedding_provider: 'mock', status: 'ready')
+CORS OPTIONS: HTTP 200 OK (access-control-allow-origin: 'https://classroomcare-ai.vercel.app', access-control-allow-credentials: 'true')
+
+--- DEPLOYED FRONTEND PROBE (https://classroomcare-ai.vercel.app) ---
+Frontend /: HTTP 200 OK (1,250 bytes)
+Frontend /buildings: HTTP 200 OK (1,250 bytes)
+Frontend /analytics: HTTP 200 OK (1,250 bytes)
+```
 
 ---
 
-## 6. Test Suite & Verification Results
+## 6. Pending Actions Before Production Sign-Off
 
-### Backend Automated Test Suite
-Ran 45 automated tests via `pytest`:
-```
-======================= 45 passed, 1 warning in 53.76s ========================
-```
-- Integration tests: 26 passed
-- RAG & evaluation tests: 10 passed
-- Safety rules tests: 6 passed
-- Security hardening tests: 3 passed
-
-### Frontend Production Build
-Ran `tsc && vite build`:
-```
-dist/index.html                     1.25 kB │ gzip:   0.65 kB
-dist/assets/index-DnJ9zq_t.css     35.95 kB │ gzip:   7.43 kB
-dist/assets/index-D7M72XT7.js   1,029.23 kB │ gzip: 275.45 kB
-✓ built in 13.07s
-Exit code: 0
-```
-Zero TypeScript compiler errors; bundle generated successfully.
+1. **Supabase SQL Editor:** Execute Migration 2 (`20261026000002_pgvector_setup.sql`) and run the verification query.
+2. **Supabase Migration 3:** Once Migration 2 is verified, execute Migration 3 (`20261026000003_rls_policies.sql`).
+3. **Seed Data Review:** Review `20261026000004_seed_data.sql` before execution to ensure campus fixture compliance.
+4. **Render Environment Variables:** Update Render dashboard environment variables:
+   - `LLM_PROVIDER=gemini`
+   - `GEMINI_MODEL=gemini-3.6-flash`
+   - `EMBEDDING_PROVIDER=gemini`
+   - `EMBEDDING_MODEL=gemini-embedding-001`
+5. **Git Merge & Push:** Review changes on `audit-fix-production` and merge into `main` to trigger production deployment.

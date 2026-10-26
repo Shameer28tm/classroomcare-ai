@@ -267,3 +267,73 @@ def test_analytics_metrics_calculation_consistency():
     assert data["sla_compliance_rate"] >= 0.0 and data["sla_compliance_rate"] <= 100.0
     assert data["average_resolution_hours"] >= 0.0
 
+def test_duplicate_building_code_returns_409():
+    # Attempt to create building with already existing code 'MECH-01'
+    payload = {
+        "id": "bld-mech-dup-01",
+        "campus_id": "campus-main-01",
+        "name": "Duplicate Mechanical Block",
+        "code": "MECH-01",
+        "floors": 2
+    }
+    res = client.post(
+        "/api/v1/facilities/buildings",
+        json=payload,
+        headers={"X-User-Role": "facilities_manager"}
+    )
+    assert res.status_code == 409
+    assert "already exists in campus" in res.json()["detail"]
+
+def test_building_creation_cross_campus_isolation():
+    # Manager of campus-main-01 attempts to create building for another campus
+    payload = {
+        "id": "bld-foreign-01",
+        "campus_id": "campus-remote-99",
+        "name": "Unauthorized Remote Building",
+        "code": "REMOTE-01",
+        "floors": 2
+    }
+    res = client.post(
+        "/api/v1/facilities/buildings",
+        json=payload,
+        headers={"X-User-Role": "facilities_manager", "X-Campus-Id": "campus-main-01"}
+    )
+    assert res.status_code == 403
+    assert "Campus Data Isolation Error" in res.json()["detail"]
+
+def test_room_creation_nonexistent_parent_building_returns_404():
+    payload = {
+        "id": "room-orphan-01",
+        "campus_id": "campus-main-01",
+        "building_id": "bld-does-not-exist-000",
+        "room_number": "999",
+        "floor": 9,
+        "name": "Orphan Room"
+    }
+    res = client.post(
+        "/api/v1/facilities/rooms",
+        json=payload,
+        headers={"X-User-Role": "facilities_manager"}
+    )
+    assert res.status_code == 404
+    assert "not found in campus" in res.json()["detail"]
+
+def test_duplicate_room_number_in_same_building_returns_409():
+    # Room 101 was created in bld-mech-test-01 in test_authorized_room_creation_succeeds
+    payload = {
+        "id": "room-mech-101-dup",
+        "campus_id": "campus-main-01",
+        "building_id": "bld-mech-test-01",
+        "room_number": "101",
+        "floor": 1,
+        "name": "Duplicate Room 101"
+    }
+    res = client.post(
+        "/api/v1/facilities/rooms",
+        json=payload,
+        headers={"X-User-Role": "facilities_manager"}
+    )
+    assert res.status_code == 409
+    assert "already exists in building" in res.json()["detail"]
+
+

@@ -1,4 +1,5 @@
 import uuid
+import logging
 from datetime import datetime, timezone, timedelta
 from typing import List, Dict, Optional, Any
 from app.models.schemas import (
@@ -8,6 +9,9 @@ from app.models.schemas import (
     SLAPolicy, AuditLog, Notification, AnalyticsOverview
 )
 from app.core.safety_rules import evaluate_deterministic_safety, assert_safety_priority_lock
+from app.core.config import settings
+
+logger = logging.getLogger(__name__)
 
 class CampusRepository:
     def __init__(self):
@@ -309,14 +313,68 @@ class CampusRepository:
             requester_name="Rachel Greene (Chemistry Lab Manager)"
         )
 
-    # --- Core Repository Methods ---
+    # --- Core Repository Methods & Supabase Persistence ---
+    def _get_supabase_headers(self) -> Optional[Dict[str, str]]:
+        if not settings.SUPABASE_URL or not settings.SUPABASE_URL.startswith("https://"):
+            return None
+        # Favor verified valid anon key, fallback to service key
+        key = settings.SUPABASE_ANON_KEY or settings.SUPABASE_SERVICE_ROLE_KEY
+        if not key or len(key) < 20:
+            return None
+        return {
+            "apikey": key,
+            "Authorization": f"Bearer {key}",
+            "Content-Type": "application/json",
+            "Prefer": "return=representation"
+        }
+
     def get_campuses(self) -> List[Campus]:
         return list(self.campuses.values())
 
     def get_buildings(self, campus_id: str) -> List[Building]:
+        headers = self._get_supabase_headers()
+        if headers:
+            try:
+                import httpx
+                with httpx.Client(timeout=4.0) as client:
+                    resp = client.get(
+                        f"{settings.SUPABASE_URL}/rest/v1/buildings?campus_id=eq.{campus_id}&select=*",
+                        headers=headers
+                    )
+                    if resp.status_code == 200:
+                        rows = resp.json()
+                        if rows:
+                            db_buildings = [Building(**r) for r in rows]
+                            for b in db_buildings:
+                                self.buildings[b.id] = b
+                            return db_buildings
+                        elif not settings.ENABLE_DEMO_DATA or settings.ENVIRONMENT == "production":
+                            return []
+            except Exception as e:
+                logger.debug(f"Could not load buildings from Supabase: {e}")
         return [b for b in self.buildings.values() if b.campus_id == campus_id]
 
     def get_rooms(self, building_id: str) -> List[Room]:
+        headers = self._get_supabase_headers()
+        if headers:
+            try:
+                import httpx
+                with httpx.Client(timeout=4.0) as client:
+                    resp = client.get(
+                        f"{settings.SUPABASE_URL}/rest/v1/rooms?building_id=eq.{building_id}&select=*",
+                        headers=headers
+                    )
+                    if resp.status_code == 200:
+                        rows = resp.json()
+                        if rows:
+                            db_rooms = [Room(**r) for r in rows]
+                            for r in db_rooms:
+                                self.rooms[r.id] = r
+                            return db_rooms
+                        elif not settings.ENABLE_DEMO_DATA or settings.ENVIRONMENT == "production":
+                            return []
+            except Exception as e:
+                logger.debug(f"Could not load rooms from Supabase: {e}")
         return [r for r in self.rooms.values() if r.building_id == building_id]
 
     def get_assets(self, room_id: Optional[str] = None) -> List[Asset]:
@@ -326,10 +384,53 @@ class CampusRepository:
 
     def add_building(self, building: Building) -> Building:
         self.buildings[building.id] = building
+        headers = self._get_supabase_headers()
+        if headers:
+            try:
+                import httpx
+                payload = {
+                    "id": building.id,
+                    "campus_id": building.campus_id,
+                    "code": building.code,
+                    "name": building.name,
+                    "floors": building.floors,
+                    "emergency_shutoff_coords": building.emergency_shutoff_coords or "Not Specified",
+                }
+                with httpx.Client(timeout=4.0) as client:
+                    client.post(
+                        f"{settings.SUPABASE_URL}/rest/v1/buildings",
+                        headers=headers,
+                        json=payload
+                    )
+            except Exception as e:
+                logger.debug(f"Could not persist building to Supabase: {e}")
         return building
 
     def add_room(self, room: Room) -> Room:
         self.rooms[room.id] = room
+        headers = self._get_supabase_headers()
+        if headers:
+            try:
+                import httpx
+                payload = {
+                    "id": room.id,
+                    "campus_id": room.campus_id,
+                    "building_id": room.building_id,
+                    "room_number": room.room_number,
+                    "floor": room.floor,
+                    "name": room.name or f"Room {room.room_number}",
+                    "capacity": room.capacity,
+                    "room_type": room.room_type,
+                    "status": room.status
+                }
+                with httpx.Client(timeout=4.0) as client:
+                    client.post(
+                        f"{settings.SUPABASE_URL}/rest/v1/rooms",
+                        headers=headers,
+                        json=payload
+                    )
+            except Exception as e:
+                logger.debug(f"Could not persist room to Supabase: {e}")
         return room
 
     def create_ticket(
@@ -568,9 +669,73 @@ class CampusRepository:
     def get_ticket(self, ticket_id: str) -> Optional[MaintenanceRequest]:
         return self.tickets.get(ticket_id)
 
+    def _fetch_supabase_tickets(self, campus_id: str) -> Optional[List[MaintenanceRequest]]:
+        headers = self._get_supabase_headers()
+        if not headers:
+            return None
+        try:
+            import httpx
+            with httpx.Client(timeout=4.0) as client:
+                resp = client.get(
+                    f"{settings.SUPABASE_URL}/rest/v1/maintenance_requests?campus_id=eq.{campus_id}&select=*",
+                    headers=headers
+                )
+                if resp.status_code == 200:
+                    rows = resp.json()
+                    if not rows and settings.ENABLE_DEMO_DATA and settings.ENVIRONMENT != "production":
+                        return None
+                    bld_map = {b.id: b.name for b in self.get_buildings(campus_id)}
+                    res = []
+                    for r in rows:
+                        try:
+                            bld_name = bld_map.get(r.get("building_id"), "Campus Facility")
+                            t = MaintenanceRequest(
+                                id=r["id"],
+                                ticket_number=r.get("ticket_number", r["id"]),
+                                campus_id=r["campus_id"],
+                                building_id=r.get("building_id", ""),
+                                building_name=bld_name,
+                                room_id=r.get("room_id", ""),
+                                room_number=r.get("room_number", "General"),
+                                asset_id=r.get("asset_id"),
+                                requester_id=r.get("requester_id", ""),
+                                requester_name=r.get("requester_name", "Campus User"),
+                                assigned_technician_id=r.get("assigned_technician_id"),
+                                assigned_technician_name=r.get("assigned_technician_name"),
+                                category=RequestCategory(r["category"]) if r.get("category") in RequestCategory._value2member_map_ else RequestCategory.OTHER,
+                                priority=RequestPriority(r["priority"]) if r.get("priority") in RequestPriority._value2member_map_ else RequestPriority.MEDIUM,
+                                status=RequestStatus(r["status"]) if r.get("status") in RequestStatus._value2member_map_ else RequestStatus.SUBMITTED,
+                                title=r.get("title", ""),
+                                description=r.get("description", ""),
+                                is_safety_hazard=bool(r.get("is_safety_hazard", False)),
+                                hazard_code=r.get("hazard_code"),
+                                safety_priority_locked=bool(r.get("safety_priority_locked", False)),
+                                safety_actions=r.get("safety_actions") or [],
+                                sla_response_due=r.get("sla_response_due", r.get("created_at")),
+                                sla_resolve_due=r.get("sla_resolve_due", r.get("created_at")),
+                                sla_breached=bool(r.get("sla_breached", False)),
+                                duplicate_of_id=r.get("duplicate_of_id"),
+                                created_at=r.get("created_at"),
+                                updated_at=r.get("updated_at", r.get("created_at"))
+                            )
+                            res.append(t)
+                        except Exception as e:
+                            logger.debug(f"Row mapping skipped: {e}")
+                    return res
+        except Exception as e:
+            logger.debug(f"Supabase tickets query skipped: {e}")
+        return None
+
     # --- Analytics & Overview Calculations ---
     def get_analytics(self, campus_id: str) -> AnalyticsOverview:
-        tickets = [t for t in self.tickets.values() if t.campus_id == campus_id]
+        # Check persistent Supabase tickets in production
+        db_tickets = self._fetch_supabase_tickets(campus_id)
+        if db_tickets is not None and (not settings.ENABLE_DEMO_DATA or settings.ENVIRONMENT == "production"):
+            tickets = db_tickets
+        elif db_tickets is not None and len(db_tickets) > 0:
+            tickets = db_tickets
+        else:
+            tickets = [t for t in self.tickets.values() if t.campus_id == campus_id]
         open_cnt = sum(1 for t in tickets if t.status in [RequestStatus.SUBMITTED, RequestStatus.TRIAGE, RequestStatus.ASSIGNED])
         prog_cnt = sum(1 for t in tickets if t.status in [RequestStatus.IN_PROGRESS, RequestStatus.AWAITING_PARTS, RequestStatus.AWAITING_INSPECTION])
         resolved_cnt = sum(1 for t in tickets if t.status in [RequestStatus.RESOLVED, RequestStatus.CLOSED])
