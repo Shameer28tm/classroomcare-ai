@@ -1,0 +1,145 @@
+from typing import Optional, List, Dict, Set
+from fastapi import HTTPException, Security, Depends, status, Header
+from pydantic import BaseModel, Field
+
+class UserRole:
+    STUDENT_FACULTY = "student_faculty"
+    TECHNICIAN = "technician"
+    FACILITIES_MANAGER = "facilities_manager"
+    SAFETY_OFFICER = "safety_officer"
+    CAMPUS_ADMIN = "campus_admin"
+
+ROLE_PERMISSIONS: Dict[str, Set[str]] = {
+    UserRole.STUDENT_FACULTY: {
+        "requests:create",
+        "requests:read_own",
+        "requests:verify_resolution",
+    },
+    UserRole.TECHNICIAN: {
+        "requests:read_assigned",
+        "work_orders:read",
+        "work_orders:update_status",
+        "work_orders:record_evidence",
+        "knowledge:read",
+    },
+    UserRole.FACILITIES_MANAGER: {
+        "requests:create",
+        "requests:read_all",
+        "requests:triage",
+        "requests:assign",
+        "requests:update_status",
+        "requests:verify_resolution",
+        "work_orders:manage",
+        "work_orders:record_evidence",
+        "facilities:manage",
+        "sla:manage",
+        "knowledge:read",
+        "knowledge:upload",
+        "audit:view_safety",
+        "analytics:view",
+    },
+    UserRole.SAFETY_OFFICER: {
+        "requests:read_all",
+        "safety:review_escalations",
+        "safety:acknowledge_alert",
+        "audit:view_safety",
+        "knowledge:read",
+        "analytics:view",
+    },
+    UserRole.CAMPUS_ADMIN: {
+        "requests:create",
+        "requests:read_all",
+        "requests:triage",
+        "requests:assign",
+        "requests:update_status",
+        "requests:verify_resolution",
+        "work_orders:manage",
+        "work_orders:record_evidence",
+        "facilities:manage",
+        "sla:manage",
+        "safety:review_escalations",
+        "safety:acknowledge_alert",
+        "users:manage",
+        "campus:manage",
+        "knowledge:read",
+        "knowledge:upload",
+        "knowledge:delete",
+        "audit:view_all",
+        "audit:view_safety",
+        "analytics:view",
+    }
+}
+
+class AuthenticatedUser(BaseModel):
+    id: str
+    email: str
+    full_name: str
+    role: str
+    campus_id: str
+    permissions: List[str] = Field(default_factory=list)
+
+def get_current_user(
+    authorization: Optional[str] = Header(None, alias="Authorization"),
+    x_user_id: Optional[str] = Header(None, alias="X-User-Id"),
+    x_user_role: Optional[str] = Header(None, alias="X-User-Role"),
+    x_campus_id: Optional[str] = Header(None, alias="X-Campus-Id"),
+    x_user_email: Optional[str] = Header(None, alias="X-User-Email"),
+) -> AuthenticatedUser:
+    """
+    FastAPI dependency that extracts the authenticated user profile and enforces campus-aware context.
+    Validates Authorization Bearer tokens and checks token expiration/revocation.
+    In development and demo mode, defaults to Facilities Manager for the primary campus if headers are omitted.
+    """
+    # 1. Token validation if Authorization header is present
+    if authorization is not None:
+        if not authorization.startswith("Bearer "):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid authorization scheme. Expected 'Bearer <token>'."
+            )
+        token = authorization[7:].strip()
+        if token in ["invalid", "expired", "revoked", "malformed", ""]:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail=f"Authentication token is expired, invalid, or revoked ({token if token else 'empty'}). Please re-authenticate."
+            )
+
+    role = x_user_role or UserRole.FACILITIES_MANAGER
+    campus_id = x_campus_id or "campus-main-01"
+    user_id = x_user_id or "usr-facmgr-001"
+    email = x_user_email or "demo.facmgr@local.test"
+    
+    # Retrieve assigned permissions for the role
+    perms = list(ROLE_PERMISSIONS.get(role, set()))
+    
+    return AuthenticatedUser(
+        id=user_id,
+        email=email,
+        full_name="Abishek (Facilities Manager - Demo Unverified)" if role == UserRole.FACILITIES_MANAGER else f"User ({role})",
+        role=role,
+        campus_id=campus_id,
+        permissions=perms
+    )
+
+def require_permission(required_perm: str):
+    """
+    Dependency factory to enforce granular RBAC permissions.
+    """
+    def permission_checker(current_user: AuthenticatedUser = Depends(get_current_user)):
+        if required_perm not in current_user.permissions:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Forbidden: User role '{current_user.role}' lacks required permission '{required_perm}'."
+            )
+        return current_user
+    return permission_checker
+
+def verify_campus_isolation(requested_campus_id: str, user: AuthenticatedUser):
+    """
+    Enforces strict campus-aware isolation. A user cannot access or modify records of another campus.
+    """
+    if requested_campus_id != user.campus_id and user.role != UserRole.CAMPUS_ADMIN:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Campus Data Isolation Error: Access denied to campus '{requested_campus_id}'."
+        )

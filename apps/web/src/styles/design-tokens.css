@@ -1,0 +1,368 @@
+/**
+ * ClassroomCare AI × NIU
+ * macOS-Inspired Design System & Design Tokens
+ * 
+ * Aesthetic: Apple-like restraint, clarity, soft neutral surfaces,
+ * refined typography, subtle translucent layers, precision borders,
+ * and high-contrast accessibility.
+ * 
+ * Default: Polished Light Mode
+ * Optional: Complete macOS Dark Mode via [data-theme="dark"]
+ */
+
+:root {
+  /* Color Scheme */
+  color-scheme: light;
+
+  /* Typography Stack */
+  --font-family-base: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --font-family-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Monaco, Consolas, monospace;
+
+  /* Backgrounds & Surfaces (Light Mode) */
+  --bg-canvas: #F8FAFC;
+  --bg-surface: #FFFFFF;
+  --bg-surface-glass: rgba(255, 255, 255, 0.82);
+  --bg-subtle: #F1F5F9;
+  --bg-muted: #E2E8F0;
+  --bg-accent-subtle: #EFF6FF;
+
+  /* Typography / Text */
+  --text-primary: #0F172A;
+  --text-secondary: #334155;
+  --text-muted: #64748B;
+  --text-inverse: #FFFFFF;
+
+  /* Apple & Institutional Accents */
+  --apple-blue: #0071E3;
+  --apple-blue-hover: #0077ED;
+  --navy-primary: #0F172A;
+  --navy-secondary: #1E293B;
+  --blue-primary: #2563EB;
+  --blue-primary-hover: #1D4ED8;
+  --blue-light: #DBEAFE;
+  --blue-tint: #EFF6FF;
+
+  /* macOS Traffic Light Indicators */
+  --traffic-close: #FF5F56;
+  --traffic-minimize: #FFBD2E;
+  --traffic-maximize: #27C93F;
+
+  /* Status Tokens */
+  --status-emergency-bg: #FEF2F2;
+  --status-emergency-text: #991B1B;
+  --status-emergency-border: #F87171;
+
+  --status-critical-bg: #FFF1F2;
+  --status-critical-text: #BE123C;
+  --status-critical-border: #FDA4AF;
+
+  --status-high-bg: #FFFBEB;
+  --status-high-text: #92400E;
+  --status-high-border: #FCD34D;
+
+  --status-medium-bg: #EFF6FF;
+  --status-medium-text: #1D4ED8;
+  --status-medium-border: #93C5FD;
+
+  --status-low-bg: #F8FAFC;
+  --status-low-text: #475569;
+  --status-low-border: #CBD5E1;
+
+  --status-success-bg: #F0FDF4;
+  --status-success-text: #166534;
+  --status-success-border: #86EFAC;
+
+  /* Borders & Dividers */
+  --border-subtle: #E2E8F0;
+  --border-default: #CBD5E1;
+  --border-hover: #94A3B8;
+  --border-focus: #0071E3;
+
+  /* macOS Shadows */
+  --shadow-xs: 0 1px 2px 0 rgba(0, 0, 0, 0.04);
+  --shadow-sm: 0 1px 3px 0 rgba(0, 0, 0, 0.06), 0 1px 2px -1px rgba(0, 0, 0, 0.04);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.07), 0 2px 4px -2px rgba(0, 0, 0, 0.04);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.08), 0 4px 6px -4px rgba(0, 0, 0, 0.03);
+  --shadow-popover: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.06);
+
+  /* Corner Radii */
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-xl: 18px;
+  --radius-pill: 9999px;
+
+  /* Animation & Motion */
+  --ease-apple: cubic-bezier(0.16, 1, 0.3, 1);
+  --duration-fast: 150ms;
+  --duration-normal: 250ms;
+  --duration-smooth: 350ms;
+
+  /* Dimensions */
+  --sidebar-width: 260px;
+  --header-height: 64px;
+}
+
+/* Optional macOS Dark Mode */
+[data-theme="dark"] {
+  color-scheme: dark;
+
+  --bg-canvas: #090D16;
+  --bg-surface: #111827;
+  --bg-surface-glass: rgba(17, 24, 39, 0.85);
+  --bg-subtle: #1F2937;
+  --bg-muted: #374151;
+  --bg-accent-subtle: #1E293B;
+
+  --text-primary: #F8FAFC;
+  --text-secondary: #CBD5E1;
+  --text-muted: #94A3B8;
+  --text-inverse: #0F172A;
+
+  --border-subtle: #1F2937;
+  --border-default: #374151;
+  --border-hover: #4B5563;
+  --border-focus: #3B82F6;
+
+  --shadow-xs: 0 1px 2px 0 rgba(0, 0, 0, 0.3);
+  --shadow-sm: 0 1px 3px 0 rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.5);
+  --shadow-popover: 0 20px 25px -5px rgba(0, 0, 0, 0.6);
+
+  --status-emergency-bg: #450A0A;
+  --status-emergency-text: #FCA5A5;
+  --status-emergency-border: #991B1B;
+
+  --status-critical-bg: #4C0519;
+  --status-critical-text: #FDA4AF;
+  --status-critical-border: #BE123C;
+
+  --status-high-bg: #451A03;
+  --status-high-text: #FDE68A;
+  --status-high-border: #92400E;
+
+  --status-medium-bg: #172554;
+  --status-medium-text: #93C5FD;
+  --status-medium-border: #1D4ED8;
+
+  --status-low-bg: #1E293B;
+  --status-low-text: #CBD5E1;
+  --status-low-border: #475569;
+
+  --status-success-bg: #052E16;
+  --status-success-text: #86EFAC;
+  --status-success-border: #166534;
+}
+
+/* Base Body Styles */
+body {
+  background-color: var(--bg-canvas);
+  color: var(--text-primary);
+  font-family: var(--font-family-base);
+  margin: 0;
+  padding: 0;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  transition: background-color var(--duration-normal) var(--ease-apple), color var(--duration-normal) var(--ease-apple);
+}
+
+/* Glassmorphism Header */
+.macos-header {
+  background-color: var(--bg-surface-glass);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+/* Card Styling */
+.cc-card {
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+  transition: border-color var(--duration-fast) var(--ease-apple), box-shadow var(--duration-fast) var(--ease-apple), transform var(--duration-fast) var(--ease-apple);
+}
+
+.cc-card-interactive:hover {
+  border-color: var(--border-hover);
+  box-shadow: var(--shadow-md);
+  transform: translateY(-1px);
+}
+
+/* macOS Window Header Bar */
+.macos-window-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--bg-subtle);
+  border-top-left-radius: var(--radius-md);
+  border-top-right-radius: var(--radius-md);
+}
+
+.macos-traffic-dots {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.macos-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+.macos-dot-close { background-color: var(--traffic-close); }
+.macos-dot-min { background-color: var(--traffic-minimize); }
+.macos-dot-max { background-color: var(--traffic-maximize); }
+
+/* Badges */
+.cc-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.2rem 0.6rem;
+  border-radius: var(--radius-pill);
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1;
+  border: 1px solid transparent;
+}
+
+.cc-badge-emergency {
+  background-color: var(--status-emergency-bg);
+  color: var(--status-emergency-text);
+  border-color: var(--status-emergency-border);
+}
+
+.cc-badge-critical {
+  background-color: var(--status-critical-bg);
+  color: var(--status-critical-text);
+  border-color: var(--status-critical-border);
+}
+
+.cc-badge-high {
+  background-color: var(--status-high-bg);
+  color: var(--status-high-text);
+  border-color: var(--status-high-border);
+}
+
+.cc-badge-medium {
+  background-color: var(--status-medium-bg);
+  color: var(--status-medium-text);
+  border-color: var(--status-medium-border);
+}
+
+.cc-badge-low {
+  background-color: var(--status-low-bg);
+  color: var(--status-low-text);
+  border-color: var(--status-low-border);
+}
+
+.cc-badge-success {
+  background-color: var(--status-success-bg);
+  color: var(--status-success-text);
+  border-color: var(--status-success-border);
+}
+
+.cc-badge-neutral {
+  background-color: var(--bg-subtle);
+  color: var(--text-secondary);
+  border-color: var(--border-subtle);
+}
+
+/* Buttons */
+.cc-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  min-height: 38px;
+  border-radius: var(--radius-md);
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: all var(--duration-fast) var(--ease-apple);
+  user-select: none;
+}
+
+.cc-btn:active {
+  transform: scale(0.98);
+}
+
+.cc-btn-primary {
+  background-color: var(--blue-primary);
+  color: var(--text-inverse);
+  box-shadow: 0 1px 2px rgba(37, 99, 235, 0.2);
+}
+.cc-btn-primary:hover {
+  background-color: var(--blue-primary-hover);
+}
+
+.cc-btn-secondary {
+  background-color: var(--bg-surface);
+  color: var(--text-primary);
+  border-color: var(--border-default);
+}
+.cc-btn-secondary:hover {
+  background-color: var(--bg-subtle);
+  border-color: var(--border-hover);
+}
+
+.cc-btn-danger {
+  background-color: var(--status-emergency-bg);
+  color: var(--status-emergency-text);
+  border-color: var(--status-emergency-border);
+}
+.cc-btn-danger:hover {
+  background-color: #FEE2E2;
+}
+
+/* Segmented Control / macOS Tabs */
+.macos-segmented-control {
+  display: inline-flex;
+  padding: 3px;
+  background-color: var(--bg-subtle);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-subtle);
+  gap: 2px;
+}
+
+.macos-segment-item {
+  padding: 6px 14px;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all var(--duration-fast) var(--ease-apple);
+  border: none;
+  background: transparent;
+}
+
+.macos-segment-item.active {
+  background-color: var(--bg-surface);
+  color: var(--text-primary);
+  box-shadow: var(--shadow-sm);
+  font-weight: 600;
+}
+
+/* Accessible focus outlines */
+*:focus-visible {
+  outline: 2px solid var(--blue-primary);
+  outline-offset: 2px;
+}
+
+/* Reduced motion preference */
+@media (prefers-reduced-motion: reduce) {
+  *, ::before, ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
